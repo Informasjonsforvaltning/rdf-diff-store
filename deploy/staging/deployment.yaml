@@ -1,0 +1,34 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fdk-dataset-query-cache
+  namespace: staging
+  labels:
+    app: fdk-dataset-query-cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fdk-dataset-query-cache
+  template:
+    metadata:
+      labels:
+        app: fdk-dataset-query-cache
+    spec:
+      containers:
+        - env:
+            - name: DIFF_STORE_URL
+              value: http://fdk-dataset-diff-store:80
+          name: fdk-dataset-query-cache
+          image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080

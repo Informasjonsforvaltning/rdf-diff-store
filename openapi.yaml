@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: RDF Query Cache
+  description: API for querying diff-store with cache
+  version: 0.1.0
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        error:
+          type: string
+
+paths:
+  /api/sparql:
+    get:
+      summary: Query current graphs with SparQL.
+      security:
+        - apiKey: []
+      parameters:
+        - in: query
+          name: id
+          required: false
+          schema:
+            title: Id
+            type: string
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+          headers: {}
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          headers: {}
+  /api/sparql/{timestamp}:
+    get:
+      summary: Query specific timestamp with SparQL.
+      security:
+        - apiKey: []
+      parameters:
+        - in: path
+          name: timestamp
+          required: true
+          schema:
+            title: Timestamp
+            type: integer
+        - in: query
+          name: id
+          required: false
+          schema:
+            title: Id
+            type: string
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+          headers: {}
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          headers: {}
