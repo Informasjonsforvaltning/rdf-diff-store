@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use lazy_static::lazy_static;
 use moka::sync::Cache;
 use oxigraph::{io::GraphFormat, model::GraphNameRef, sparql::QueryResultsFormat};
 use reqwest::StatusCode;
@@ -9,6 +10,10 @@ use crate::{
     metrics::{DATA_FETCH_TIME, GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
     DIFF_STORE_URL,
 };
+
+lazy_static! {
+    static ref DIFF_STORE_API_LOCK: async_lock::Mutex<()> = async_lock::Mutex::new(());
+}
 
 #[derive(Clone)]
 pub struct QueryCache {
@@ -89,6 +94,9 @@ async fn load_graph_store(
 }
 
 async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<String, Error> {
+    // Diff store repo is guarded by lock, no point in sending more than one request at once.
+    let diff_repo_guard = DIFF_STORE_API_LOCK.lock().await;
+
     let start_time = Instant::now();
     let response = http_client
         .get(format!("{}/api/graphs/{timestamp}", DIFF_STORE_URL.clone()))
@@ -97,6 +105,8 @@ async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<St
         .send()
         .await?;
     let elapsed_millis = start_time.elapsed().as_millis();
+
+    drop(diff_repo_guard);
 
     match response.status() {
         StatusCode::OK => {
