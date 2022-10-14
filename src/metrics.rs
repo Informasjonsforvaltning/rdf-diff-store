@@ -16,7 +16,7 @@ lazy_static! {
     pub static ref RESPONSE_TIME: HistogramVec = HistogramVec::new(
         HistogramOpts {
             common_opts: Opts::new("response_time", "Response Times"),
-            buckets: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 100.0],
+            buckets: vec![0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0],
         },
         &["endpoint", "cache_lvl"]
     )
@@ -26,7 +26,7 @@ lazy_static! {
     });
     pub static ref QUERY_PROCESSING_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("query_processing_time", "Query Processing Times"),
-        buckets: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 100.0],
+        buckets: vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
     })
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "query_processing_time");
@@ -34,7 +34,7 @@ lazy_static! {
     });
     pub static ref DATA_FETCH_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("data_fetch_time", "Data Fetch Times"),
-        buckets: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 100.0],
+        buckets: vec![0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0],
     })
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "data_fetch_time");
@@ -42,7 +42,7 @@ lazy_static! {
     });
     pub static ref GRAPH_PARSE_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("graph_parse_time", "Data Fetch Times"),
-        buckets: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 100.0],
+        buckets: vec![0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0],
     })
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "graph_parse_time");
