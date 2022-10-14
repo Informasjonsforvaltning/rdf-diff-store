@@ -68,21 +68,29 @@ async fn load_graph_store(
     http_client: &reqwest::Client,
     timestamp: u64,
 ) -> Result<oxigraph::store::Store, Error> {
-    let graph = fetch_graph(http_client, timestamp).await?;
+    let text = fetch_graph(http_client, timestamp).await?;
     let store = oxigraph::store::Store::new()?;
-    store.load_graph(
-        graph.to_string().as_ref(),
-        GraphFormat::Turtle,
-        GraphNameRef::DefaultGraph,
-        None,
-    )?;
+    let graphs = text.split("# ---");
+    for graph in graphs {
+        if graph.contains("<") {
+            store.load_graph(
+                graph.to_string().as_ref(),
+                GraphFormat::Turtle,
+                GraphNameRef::DefaultGraph,
+                None,
+            )?;
+        }
+    }
     Ok(store)
 }
 
 async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<String, Error> {
     let start_time = Instant::now();
     let response = http_client
-        .get(format!("{}/api/graphs/{timestamp}", DIFF_STORE_URL.clone()))
+        .get(format!(
+            "{}/api/graphs/{timestamp}?raw=true",
+            DIFF_STORE_URL.clone()
+        ))
         //.header("X-API-KEY", DIFF_STORE_API_KEY.clone())
         .send()
         .await?;
