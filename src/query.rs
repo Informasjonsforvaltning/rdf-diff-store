@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{io::Cursor, time::Instant};
 
 use lazy_static::lazy_static;
 use moka::sync::Cache;
@@ -27,6 +27,25 @@ impl QueryCache {
             graphs_cache: Cache::new(1000),
             query_cache: Cache::new(1000),
         }
+    }
+}
+
+pub async fn graphs_with_cache(
+    cache: &QueryCache,
+    http_client: &reqwest::Client,
+    timestamp: u64,
+) -> Result<(String, u64), Error> {
+    if let Some(graph_store) = cache.graphs_cache.get(&timestamp) {
+        let query_result = to_turtle(&graph_store)?;
+
+        Ok((query_result, 1))
+    } else {
+        let graph_store = load_graph_store(http_client, timestamp).await?;
+        let query_result = to_turtle(&graph_store)?;
+
+        cache.graphs_cache.insert(timestamp, graph_store);
+
+        Ok((query_result, 0))
     }
 }
 
@@ -115,4 +134,11 @@ async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<St
         }
         _ => Err(response.text().await?.into()),
     }
+}
+
+pub fn to_turtle(store: &oxigraph::store::Store) -> Result<String, Error> {
+    let mut buff = Cursor::new(Vec::new());
+    store.dump_graph(&mut buff, GraphFormat::Turtle, GraphNameRef::DefaultGraph)?;
+
+    String::from_utf8(buff.into_inner()).map_err(|e| e.to_string().into())
 }

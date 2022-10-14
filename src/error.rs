@@ -19,6 +19,8 @@ pub enum Error {
     #[error(transparent)]
     LoaderError(#[from] oxigraph::store::LoaderError),
     #[error(transparent)]
+    SerializerError(#[from] oxigraph::store::SerializerError),
+    #[error(transparent)]
     EvaluationError(#[from] oxigraph::sparql::EvaluationError),
     #[error(transparent)]
     ReqwestError(#[from] reqwest::Error),
