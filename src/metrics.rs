@@ -40,6 +40,14 @@ lazy_static! {
         tracing::error!(error = e.to_string(), "data_fetch_time");
         std::process::exit(1);
     });
+    pub static ref GRAPH_PARSE_TIME: Histogram = Histogram::with_opts(HistogramOpts {
+        common_opts: Opts::new("graph_parse_time", "Data Fetch Times"),
+        buckets: vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 100.0],
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "graph_parse_time");
+        std::process::exit(1);
+    });
 }
 
 pub fn register_metrics() {
@@ -74,6 +82,13 @@ pub fn register_metrics() {
         .register(Box::new(DATA_FETCH_TIME.clone()))
         .unwrap_or_else(|e| {
             tracing::error!(error = e.to_string(), "data_fetch_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(GRAPH_PARSE_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "graph_parse_time collector error");
             std::process::exit(1);
         });
 }

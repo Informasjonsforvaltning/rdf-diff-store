@@ -5,7 +5,7 @@ use oxigraph::{io::GraphFormat, model::GraphNameRef, sparql::QueryResultsFormat}
 
 use crate::{
     error::Error,
-    metrics::{DATA_FETCH_TIME, QUERY_PROCESSING_TIME},
+    metrics::{DATA_FETCH_TIME, GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
     DIFF_STORE_URL,
 };
 
@@ -69,6 +69,7 @@ async fn load_graph_store(
     timestamp: u64,
 ) -> Result<oxigraph::store::Store, Error> {
     let text = fetch_graph(http_client, timestamp).await?;
+    let start_time = Instant::now();
     let store = oxigraph::store::Store::new()?;
     let graphs = text.split("# ---");
     for graph in graphs {
@@ -81,6 +82,8 @@ async fn load_graph_store(
             )?;
         }
     }
+    let elapsed_millis = start_time.elapsed().as_millis();
+    GRAPH_PARSE_TIME.observe(elapsed_millis as f64 / 1000.0);
     Ok(store)
 }
 
