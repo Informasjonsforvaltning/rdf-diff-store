@@ -22,6 +22,7 @@ spec:
               value: http://fdk-dataset-diff-store:80
           name: fdk-dataset-query-cache
           image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           livenessProbe:

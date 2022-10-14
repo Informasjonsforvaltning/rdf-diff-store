@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use moka::sync::Cache;
 use oxigraph::{io::GraphFormat, model::GraphNameRef, sparql::QueryResultsFormat};
+use reqwest::StatusCode;
 
 use crate::{
     error::Error,
@@ -96,8 +97,12 @@ async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<St
         .send()
         .await?;
     let elapsed_millis = start_time.elapsed().as_millis();
-    DATA_FETCH_TIME.observe(elapsed_millis as f64 / 1000.0);
 
-    let text = response.text().await?;
-    Ok(text)
+    match response.status() {
+        StatusCode::OK => {
+            DATA_FETCH_TIME.observe(elapsed_millis as f64 / 1000.0);
+            Ok(response.text().await?)
+        }
+        _ => Err(response.text().await?.into()),
+    }
 }
