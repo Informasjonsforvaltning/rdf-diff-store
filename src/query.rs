@@ -90,10 +90,8 @@ async fn load_graph_store(
 async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<String, Error> {
     let start_time = Instant::now();
     let response = http_client
-        .get(format!(
-            "{}/api/graphs/{timestamp}?raw=true",
-            DIFF_STORE_URL.clone()
-        ))
+        .get(format!("{}/api/graphs/{timestamp}", DIFF_STORE_URL.clone()))
+        .query(&[("raw", "true")])
         //.header("X-API-KEY", DIFF_STORE_API_KEY.clone())
         .send()
         .await?;
