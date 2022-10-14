@@ -1,10 +1,22 @@
 use lazy_static::lazy_static;
-use prometheus::{Encoder, Histogram, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
+use prometheus::{
+    Encoder, Gauge, Histogram, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry,
+};
 
-use crate::error::Error;
+use crate::{error::Error, CACHE};
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
+    pub static ref GRAPH_CACHE_COUNT: Gauge =
+        Gauge::new("graph_cache_count", "Number of cached graphs").unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "graph_cache_count metric error");
+            std::process::exit(1);
+        });
+    pub static ref QUERY_CACHE_COUNT: Gauge =
+        Gauge::new("query_cache_count", "Number of cached queries").unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "query_cache_count metric error");
+            std::process::exit(1);
+        });
     pub static ref PROCESSED_REQUESTS: IntCounterVec = IntCounterVec::new(
         Opts::new("processed_requests", "Processed Query Requests"),
         &["endpoint", "status"]
@@ -69,6 +81,20 @@ pub fn register_metrics() {
         });
 
     REGISTRY
+        .register(Box::new(GRAPH_CACHE_COUNT.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "graph_cache_count collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(QUERY_CACHE_COUNT.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "query_cache_count collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
         .register(Box::new(QUERY_PROCESSING_TIME.clone()))
         .unwrap_or_else(|e| {
             tracing::error!(
@@ -94,6 +120,10 @@ pub fn register_metrics() {
 }
 
 pub fn get_metrics() -> Result<String, Error> {
+    let cache = CACHE.clone();
+    GRAPH_CACHE_COUNT.set(cache.graphs_cache.entry_count() as f64);
+    QUERY_CACHE_COUNT.set(cache.query_cache.entry_count() as f64);
+
     let mut buffer = Vec::new();
 
     prometheus::TextEncoder::new()

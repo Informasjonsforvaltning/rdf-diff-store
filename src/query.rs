@@ -17,8 +17,8 @@ lazy_static! {
 
 #[derive(Clone)]
 pub struct QueryCache {
-    graphs_cache: Cache<u64, oxigraph::store::Store>,
-    query_cache: Cache<(u64, String), String>,
+    pub graphs_cache: Cache<u64, oxigraph::store::Store>,
+    pub query_cache: Cache<(u64, String), String>,
 }
 
 impl QueryCache {

@@ -29,6 +29,7 @@ lazy_static! {
     //     tracing::error!(error = e.to_string().as_str(), "DIFF_STORE_API_KEY not found");
     //     std::process::exit(1)
     // });
+    static ref CACHE: QueryCache = QueryCache::new();
     static ref DIFF_STORE_URL: String = env::var("DIFF_STORE_URL").unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "DIFF_STORE_URL not found");
         std::process::exit(1)
@@ -176,7 +177,7 @@ async fn main() -> std::io::Result<()> {
     // let _ = DIFF_STORE_API_KEY.clone();
 
     let state = State {
-        cache: QueryCache::new(),
+        cache: CACHE.clone(),
         http_client: reqwest::Client::new(),
     };
 
