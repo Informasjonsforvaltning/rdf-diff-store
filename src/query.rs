@@ -1,14 +1,14 @@
-use std::{io::Cursor, time::Instant};
+use std::{string::FromUtf8Error, time::Instant};
 
 use lazy_static::lazy_static;
 use moka::sync::Cache;
 use oxigraph::{io::GraphFormat, model::GraphNameRef, sparql::QueryResultsFormat};
-use reqwest::StatusCode;
 
 use crate::{
     error::Error,
-    metrics::{DATA_FETCH_TIME, GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
-    DIFF_STORE_URL,
+    git::fetch_graphs,
+    metrics::{GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
+    rdf::to_turtle,
 };
 
 lazy_static! {
@@ -30,17 +30,13 @@ impl QueryCache {
     }
 }
 
-pub async fn graphs_with_cache(
-    cache: &QueryCache,
-    http_client: &reqwest::Client,
-    timestamp: u64,
-) -> Result<(String, u64), Error> {
+pub async fn graphs_with_cache(cache: &QueryCache, timestamp: u64) -> Result<(String, u64), Error> {
     if let Some(graph_store) = cache.graphs_cache.get(&timestamp) {
         let query_result = to_turtle(&graph_store)?;
 
         Ok((query_result, 1))
     } else {
-        let graph_store = load_graph_store(http_client, timestamp).await?;
+        let graph_store = load_graph_store(timestamp).await?;
         let query_result = to_turtle(&graph_store)?;
 
         cache.graphs_cache.insert(timestamp, graph_store);
@@ -51,7 +47,6 @@ pub async fn graphs_with_cache(
 
 pub async fn query_with_cache(
     cache: &QueryCache,
-    http_client: &reqwest::Client,
     timestamp: u64,
     query: String,
 ) -> Result<(String, u64), Error> {
@@ -65,7 +60,7 @@ pub async fn query_with_cache(
 
         Ok((query_result, 1))
     } else {
-        let graph_store = load_graph_store(http_client, timestamp).await?;
+        let graph_store = load_graph_store(timestamp).await?;
         let query_result = execute_query_in_store(&graph_store, &query)?;
 
         cache.graphs_cache.insert(timestamp, graph_store);
@@ -89,56 +84,51 @@ fn execute_query_in_store(store: &oxigraph::store::Store, query: &str) -> Result
     Ok(raw_json)
 }
 
-async fn load_graph_store(
-    http_client: &reqwest::Client,
-    timestamp: u64,
-) -> Result<oxigraph::store::Store, Error> {
-    let text = fetch_graph(http_client, timestamp).await?;
-    let start_time = Instant::now();
+async fn load_graph_store(timestamp: u64) -> Result<oxigraph::store::Store, Error> {
     let store = oxigraph::store::Store::new()?;
-    let graphs = text.split("# ---");
-    for graph in graphs {
-        if graph.contains("<") {
-            store.load_graph(
-                graph.to_string().as_ref(),
-                GraphFormat::Turtle,
-                GraphNameRef::DefaultGraph,
-                None,
-            )?;
-        }
+
+    let graphs = fetch_graphs(timestamp).await?;
+    if graphs.len() == 0 {
+        return Ok(store);
     }
+
+    let graph = combine_graphs(graphs)?;
+    let start_time = Instant::now();
+
+    // Combining all graphs into a single one and using bulk loader is a bit
+    // faster than parsing one at a time (with or without bulk loader).
+    store.bulk_loader().load_graph(
+        graph.as_ref(),
+        GraphFormat::Turtle,
+        GraphNameRef::DefaultGraph,
+        None,
+    )?;
+
     let elapsed_millis = start_time.elapsed().as_millis();
     GRAPH_PARSE_TIME.observe(elapsed_millis as f64 / 1000.0);
+
     Ok(store)
 }
 
-async fn fetch_graph(http_client: &reqwest::Client, timestamp: u64) -> Result<String, Error> {
-    // Diff store repo is guarded by lock, no point in sending more than one request at once.
-    let diff_repo_guard = DIFF_STORE_API_LOCK.lock().await;
+fn combine_graphs(graphs: Vec<Vec<u8>>) -> Result<String, Error> {
+    let graph_strs = graphs
+        .into_iter()
+        .map(|graph| String::from_utf8(graph))
+        .collect::<Result<Vec<String>, FromUtf8Error>>()?;
 
-    let start_time = Instant::now();
-    let response = http_client
-        .get(format!("{}/api/graphs/{timestamp}", DIFF_STORE_URL.clone()))
-        .query(&[("raw", "true")])
-        //.header("X-API-KEY", DIFF_STORE_API_KEY.clone())
-        .send()
-        .await?;
-    let elapsed_millis = start_time.elapsed().as_millis();
+    let graph_count = graph_strs.len();
+    let mut prefix_merge = Vec::with_capacity(graph_count);
+    let mut graph_merge = Vec::with_capacity(graph_count);
 
-    drop(diff_repo_guard);
-
-    match response.status() {
-        StatusCode::OK => {
-            DATA_FETCH_TIME.observe(elapsed_millis as f64 / 1000.0);
-            Ok(response.text().await?)
+    for i in 0..graph_strs.len() {
+        let split = graph_strs[i].split_once("\n");
+        if let Some((prefix_part, graph_part)) = split {
+            prefix_merge.push(prefix_part);
+            graph_merge.push(graph_part);
         }
-        _ => Err(response.text().await?.into()),
     }
-}
 
-pub fn to_turtle(store: &oxigraph::store::Store) -> Result<String, Error> {
-    let mut buff = Cursor::new(Vec::new());
-    store.dump_graph(&mut buff, GraphFormat::Turtle, GraphNameRef::DefaultGraph)?;
-
-    String::from_utf8(buff.into_inner()).map_err(|e| e.to_string().into())
+    let mut combined = prefix_merge;
+    combined.append(&mut graph_merge);
+    Ok(combined.join("\n"))
 }

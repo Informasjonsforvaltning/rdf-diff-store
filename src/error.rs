@@ -1,3 +1,5 @@
+use std::io;
+
 use actix_web::{HttpResponse, ResponseError};
 
 use crate::models;
@@ -24,6 +26,12 @@ pub enum Error {
     EvaluationError(#[from] oxigraph::sparql::EvaluationError),
     #[error(transparent)]
     ReqwestError(#[from] reqwest::Error),
+    #[error(transparent)]
+    GitError(#[from] git2::Error),
+    #[error(transparent)]
+    IOError(#[from] io::Error),
+    #[error(transparent)]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 impl From<&str> for Error {

@@ -4,36 +4,42 @@ extern crate serde;
 use std::{env, time::Instant};
 
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
+use git2::Repository;
 use lazy_static::lazy_static;
 use query::QueryCache;
 
 use crate::{
     error::Error,
+    git::ReusableRepo,
     metrics::PROCESSED_REQUESTS,
     metrics::{get_metrics, register_metrics, RESPONSE_TIME},
     query::{graphs_with_cache, query_with_cache},
 };
 
 mod error;
+mod git;
 mod metrics;
 #[allow(dead_code, non_snake_case)]
 mod models;
 mod query;
+mod rdf;
 
 lazy_static! {
     // static ref API_KEY: String = env::var("API_KEY").unwrap_or_else(|e| {
     //     tracing::error!(error = e.to_string().as_str(), "API_KEY not found");
     //     std::process::exit(1)
     // });
-    // static ref DIFF_STORE_API_KEY: String = env::var("DIFF_STORE_API_KEY").unwrap_or_else(|e| {
-    //     tracing::error!(error = e.to_string().as_str(), "DIFF_STORE_API_KEY not found");
-    //     std::process::exit(1)
-    // });
     static ref CACHE: QueryCache = QueryCache::new();
-    static ref DIFF_STORE_URL: String = env::var("DIFF_STORE_URL").unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "DIFF_STORE_URL not found");
+
+    static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string().as_str(), "GIT_REPO_URL not found");
         std::process::exit(1)
     });
+    static ref REPO_LOCK: async_lock::Mutex<Vec<Repository>> =
+        async_lock::Mutex::new(ReusableRepo::get_pool().unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string().as_str(), "Unable to create repos");
+            std::process::exit(1)
+        }));
 }
 
 #[get("/livez")]
@@ -90,13 +96,7 @@ async fn get_api_sparql(
     let query_params = query.into_inner();
 
     let start_time = Instant::now();
-    let result = query_with_cache(
-        &state.cache,
-        &state.http_client,
-        timestamp,
-        query_params.query,
-    )
-    .await;
+    let result = query_with_cache(&state.cache, timestamp, query_params.query).await;
     let elapsed_millis = start_time.elapsed().as_millis();
 
     match result {
@@ -131,7 +131,7 @@ async fn get_api_graphs(
     let timestamp = path.into_inner();
 
     let start_time = Instant::now();
-    let result = graphs_with_cache(&state.cache, &state.http_client, timestamp).await;
+    let result = graphs_with_cache(&state.cache, timestamp).await;
     let elapsed_millis = start_time.elapsed().as_millis();
 
     match result {
@@ -158,7 +158,6 @@ async fn get_api_graphs(
 #[derive(Clone)]
 struct State {
     cache: QueryCache,
-    http_client: reqwest::Client,
 }
 
 #[actix_web::main]
@@ -170,15 +169,21 @@ async fn main() -> std::io::Result<()> {
         .with_current_span(false)
         .init();
 
+    ReusableRepo::create_pool().unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string().as_str(), "Unable to create repos");
+        std::process::exit(1)
+    });
+
     register_metrics();
 
     // Fail if env vars missing
     // let _ = API_KEY.clone();
     // let _ = DIFF_STORE_API_KEY.clone();
+    let guard = REPO_LOCK.lock();
+    drop(guard);
 
     let state = State {
         cache: CACHE.clone(),
-        http_client: reqwest::Client::new(),
     };
 
     HttpServer::new(move || {
