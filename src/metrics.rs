@@ -74,7 +74,7 @@ lazy_static! {
     });
     pub static ref FILE_READ_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("file_read_time", "File Read Time"),
-        buckets: vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0],
+        buckets: vec![0.1, 0.5, 1.0, 2.5, 5.0, 7.5, 10.0],
     })
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "file_read_time");
