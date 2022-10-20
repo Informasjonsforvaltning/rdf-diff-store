@@ -202,7 +202,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_api_graphs)
     })
     .bind(("0.0.0.0", 8080))?
-    .workers(4)
+    .workers(32)
     .run()
     .await
 }
