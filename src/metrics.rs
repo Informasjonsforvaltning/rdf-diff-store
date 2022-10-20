@@ -7,16 +7,22 @@ use crate::{error::Error, CACHE};
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
-    pub static ref GRAPH_CACHE_COUNT: Gauge =
-        Gauge::new("graph_cache_count", "Number of cached graphs").unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string(), "graph_cache_count metric error");
-            std::process::exit(1);
-        });
-    pub static ref QUERY_CACHE_COUNT: Gauge =
-        Gauge::new("query_cache_count", "Number of cached queries").unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string(), "query_cache_count metric error");
-            std::process::exit(1);
-        });
+    pub static ref GRAPH_CACHE_COUNT: Gauge = Gauge::new(
+        "graph_cache_count",
+        "Number of timestamped graphs in cached"
+    )
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "graph_cache_count metric error");
+        std::process::exit(1);
+    });
+    pub static ref QUERY_CACHE_COUNT: Gauge = Gauge::new(
+        "query_cache_count",
+        "Number of timestamped queries in cache"
+    )
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "query_cache_count metric error");
+        std::process::exit(1);
+    });
     pub static ref PROCESSED_REQUESTS: IntCounterVec = IntCounterVec::new(
         Opts::new("processed_requests", "Processed Query Requests"),
         &["endpoint", "status"]
