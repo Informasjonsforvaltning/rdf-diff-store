@@ -7,7 +7,11 @@ use std::{
 
 use git2::Repository;
 
-use crate::{error::Error, metrics::DATA_FETCH_TIME, GIT_REPO_URL, REPO_LOCK};
+use crate::{
+    error::Error,
+    metrics::{FILE_READ_TIME, REPO_CHEKOUT_TIME, REPO_FETCH_TIME},
+    GIT_REPO_URL, REPO_LOCK,
+};
 
 pub struct ReusableRepo {}
 
@@ -45,12 +49,15 @@ impl ReusableRepo {
 }
 
 fn sync_repo(repo: &Repository) -> Result<bool, Error> {
+    let start_time = Instant::now();
+
     repo.find_remote("origin")?.fetch(&["master"], None, None)?;
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
     let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
-    if analysis.0.is_up_to_date() {
+
+    let result = if analysis.0.is_up_to_date() {
         Ok(false)
     } else if analysis.0.is_fast_forward() {
         let refname = format!("refs/heads/master");
@@ -61,10 +68,21 @@ fn sync_repo(repo: &Repository) -> Result<bool, Error> {
         Ok(true)
     } else {
         Err("Not able to fast-forward repo.".into())
+    };
+
+    let elapsed_millis = start_time.elapsed().as_millis();
+    if let Ok(change) = result {
+        REPO_FETCH_TIME
+            .with_label_values(&[&format!("{}", change)])
+            .observe(elapsed_millis as f64 / 1000.0);
     }
+
+    result
 }
 
 fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> {
+    let start_time = Instant::now();
+
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::REVERSE)?;
     revwalk.push_head()?;
@@ -78,7 +96,7 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
     }
 
     let ts = timestamp as i64;
-    match commit_times.binary_search_by(|(time, _)| time.seconds().cmp(&ts)) {
+    let result = match commit_times.binary_search_by(|(time, _)| time.seconds().cmp(&ts)) {
         Err(0) => Ok(false),
         Ok(i) | Err(i) => {
             let oid = commit_times[i - 1].1;
@@ -101,22 +119,19 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
             repo.set_head(&refname)?;
             Ok(true)
         }
+    };
+
+    let elapsed_millis = start_time.elapsed().as_millis();
+    if let Ok(change) = result {
+        REPO_CHEKOUT_TIME
+            .with_label_values(&[&format!("{}", change)])
+            .observe(elapsed_millis as f64 / 1000.0);
     }
+
+    result
 }
 
 pub async fn fetch_graphs(timestamp: u64) -> Result<Vec<Vec<u8>>, Error> {
-    let start_time = Instant::now();
-    let files = get_files(timestamp).await;
-    let elapsed_millis = start_time.elapsed().as_millis();
-
-    if let Ok(_) = files {
-        DATA_FETCH_TIME.observe(elapsed_millis as f64 / 1000.0);
-    }
-
-    files
-}
-
-pub async fn get_files(timestamp: u64) -> Result<Vec<Vec<u8>>, Error> {
     let repo = ReusableRepo::new().await;
     sync_repo(&repo)?;
     match checkout_timestamp(&repo, timestamp)? {
@@ -136,6 +151,8 @@ pub async fn get_files(timestamp: u64) -> Result<Vec<Vec<u8>>, Error> {
 }
 
 async fn read_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
+    let start_time = Instant::now();
+
     let mut files = Vec::new();
     for filepath in path.read_dir()? {
         let filepath = filepath?;
@@ -143,6 +160,10 @@ async fn read_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
             files.push(tokio::fs::read(filepath.path()).await?)
         }
     }
+
+    let elapsed_millis = start_time.elapsed().as_millis();
+    FILE_READ_TIME.observe(elapsed_millis as f64 / 1000.0);
+
     Ok(files)
 }
 

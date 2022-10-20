@@ -44,12 +44,34 @@ lazy_static! {
         tracing::error!(error = e.to_string(), "query_processing_time");
         std::process::exit(1);
     });
-    pub static ref DATA_FETCH_TIME: Histogram = Histogram::with_opts(HistogramOpts {
-        common_opts: Opts::new("data_fetch_time", "Data Fetch Times"),
-        buckets: vec![0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0],
+    pub static ref REPO_FETCH_TIME: HistogramVec = HistogramVec::new(
+        HistogramOpts {
+            common_opts: Opts::new("repo_fetch_time", "Repo Fetch Times"),
+            buckets: vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0],
+        },
+        &["change"]
+    )
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "repo_fetch_time");
+        std::process::exit(1);
+    });
+    pub static ref REPO_CHEKOUT_TIME: HistogramVec = HistogramVec::new(
+        HistogramOpts {
+            common_opts: Opts::new("repo_checkout_time", "Repo Checkout Times"),
+            buckets: vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0],
+        },
+        &["change"]
+    )
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "repo_checkout_time");
+        std::process::exit(1);
+    });
+    pub static ref FILE_READ_TIME: Histogram = Histogram::with_opts(HistogramOpts {
+        common_opts: Opts::new("file_read_time", "File Read Time"),
+        buckets: vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0],
     })
     .unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string(), "data_fetch_time");
+        tracing::error!(error = e.to_string(), "file_read_time");
         std::process::exit(1);
     });
     pub static ref GRAPH_PARSE_TIME: Histogram = Histogram::with_opts(HistogramOpts {
@@ -105,9 +127,23 @@ pub fn register_metrics() {
         });
 
     REGISTRY
-        .register(Box::new(DATA_FETCH_TIME.clone()))
+        .register(Box::new(REPO_CHEKOUT_TIME.clone()))
         .unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string(), "data_fetch_time collector error");
+            tracing::error!(error = e.to_string(), "repo_checkout_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(REPO_FETCH_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "repo_fetch_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(FILE_READ_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "file_read_time collector error");
             std::process::exit(1);
         });
 
