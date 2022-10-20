@@ -34,7 +34,7 @@ lazy_static! {
     pub static ref RESPONSE_TIME: HistogramVec = HistogramVec::new(
         HistogramOpts {
             common_opts: Opts::new("response_time", "Response Times"),
-            buckets: vec![0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0],
+            buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
         },
         &["endpoint", "cache_lvl"]
     )
