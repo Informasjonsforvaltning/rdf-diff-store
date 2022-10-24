@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fdk-dataset-query-cache
+  namespace: staging
+spec:
+  selector:
+    app: fdk-dataset-query-cache
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: NodePort
