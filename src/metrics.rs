@@ -1,31 +1,23 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    Encoder, Gauge, Histogram, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry,
+    Encoder, Histogram, HistogramOpts, HistogramVec, IntCounterVec, IntGaugeVec, Opts, Registry,
 };
 
-use crate::{error::Error, CACHE};
+use crate::error::Error;
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
-    pub static ref GRAPH_CACHE_COUNT: Gauge = Gauge::new(
-        "graph_cache_count",
-        "Number of timestamped graphs in cached"
+    pub static ref CACHE_COUNT: IntGaugeVec = IntGaugeVec::new(
+        Opts::new("cache_count", "Number of items cached"),
+        &["type"]
     )
     .unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string(), "graph_cache_count metric error");
-        std::process::exit(1);
-    });
-    pub static ref QUERY_CACHE_COUNT: Gauge = Gauge::new(
-        "query_cache_count",
-        "Number of timestamped queries in cache"
-    )
-    .unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string(), "query_cache_count metric error");
+        tracing::error!(error = e.to_string(), "cache_count metric error");
         std::process::exit(1);
     });
     pub static ref PROCESSED_REQUESTS: IntCounterVec = IntCounterVec::new(
         Opts::new("processed_requests", "Processed Query Requests"),
-        &["endpoint", "status"]
+        &["method", "endpoint", "status"]
     )
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "processed_requests metric error");
@@ -36,7 +28,7 @@ lazy_static! {
             common_opts: Opts::new("response_time", "Response Times"),
             buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
         },
-        &["endpoint", "cache_lvl"]
+        &["method", "endpoint", "cache_lvl"]
     )
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "response_time");
@@ -109,16 +101,9 @@ pub fn register_metrics() {
         });
 
     REGISTRY
-        .register(Box::new(GRAPH_CACHE_COUNT.clone()))
+        .register(Box::new(CACHE_COUNT.clone()))
         .unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string(), "graph_cache_count collector error");
-            std::process::exit(1);
-        });
-
-    REGISTRY
-        .register(Box::new(QUERY_CACHE_COUNT.clone()))
-        .unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string(), "query_cache_count collector error");
+            tracing::error!(error = e.to_string(), "cache_count collector error");
             std::process::exit(1);
         });
 
@@ -162,10 +147,6 @@ pub fn register_metrics() {
 }
 
 pub fn get_metrics() -> Result<String, Error> {
-    let cache = CACHE.clone();
-    GRAPH_CACHE_COUNT.set(cache.graphs_cache.entry_count() as f64);
-    QUERY_CACHE_COUNT.set(cache.query_cache.entry_count() as f64);
-
     let mut buffer = Vec::new();
 
     prometheus::TextEncoder::new()

@@ -1,46 +1,16 @@
-#[macro_use]
-extern crate serde;
-
-use std::{env, time::Instant};
+use std::time::Instant;
 
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
-use git2::Repository;
-use lazy_static::lazy_static;
-use query::QueryCache;
+use rdf_diff_store::git::ReusableRepoPool;
+use rdf_diff_store::metrics::CACHE_COUNT;
 
-use crate::{
+use rdf_diff_store::{
     error::Error,
-    git::ReusableRepo,
-    metrics::PROCESSED_REQUESTS,
-    metrics::{get_metrics, register_metrics, RESPONSE_TIME},
+    metrics::{get_metrics, register_metrics, PROCESSED_REQUESTS, RESPONSE_TIME},
+    query::QueryCache,
     query::{graphs_with_cache, query_with_cache},
 };
-
-mod error;
-mod git;
-mod metrics;
-#[allow(dead_code, non_snake_case)]
-mod models;
-mod query;
-mod rdf;
-
-lazy_static! {
-    // static ref API_KEY: String = env::var("API_KEY").unwrap_or_else(|e| {
-    //     tracing::error!(error = e.to_string().as_str(), "API_KEY not found");
-    //     std::process::exit(1)
-    // });
-    static ref CACHE: QueryCache = QueryCache::new();
-
-    static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "GIT_REPO_URL not found");
-        std::process::exit(1)
-    });
-    static ref REPO_LOCK: async_lock::Mutex<Vec<Repository>> =
-        async_lock::Mutex::new(ReusableRepo::get_pool().unwrap_or_else(|e| {
-            tracing::error!(error = e.to_string().as_str(), "Unable to create repos");
-            std::process::exit(1)
-        }));
-}
+use serde::Deserialize;
 
 #[get("/livez")]
 async fn livez() -> Result<impl Responder, Error> {
@@ -53,7 +23,17 @@ async fn readyz() -> Result<impl Responder, Error> {
 }
 
 #[get("/metrics")]
-async fn metrics_endpoint() -> impl Responder {
+async fn metrics_endpoint(state: web::Data<State>) -> impl Responder {
+    CACHE_COUNT
+        .with_label_values(&["graphs"])
+        .set(state.cache.graphs_cache.entry_count() as i64);
+    CACHE_COUNT
+        .with_label_values(&["queries"])
+        .set(state.cache.query_cache.entry_count() as i64);
+    CACHE_COUNT
+        .with_label_values(&["stores"])
+        .set(state.cache.store_cache.entry_count() as i64);
+
     match get_metrics() {
         Ok(metrics) => metrics,
         Err(e) => {
@@ -63,21 +43,6 @@ async fn metrics_endpoint() -> impl Responder {
     }
 }
 
-// fn validate_api_key(request: HttpRequest) -> Result<(), Error> {
-//     let token = request
-//         .headers()
-//         .get("X-API-KEY")
-//         .ok_or(Error::Unauthorized("X-API-KEY header missing".to_string()))?
-//         .to_str()
-//         .map_err(|_| Error::Unauthorized("invalid api key".to_string()))?;
-
-//     if token == API_KEY.clone() {
-//         Ok(())
-//     } else {
-//         Err(Error::Unauthorized("Incorrect api key".to_string()))
-//     }
-// }
-
 #[derive(Debug, Deserialize)]
 pub struct SparqlQueryParams {
     query: String,
@@ -86,6 +51,7 @@ pub struct SparqlQueryParams {
 #[get("/api/sparql/{timestamp}")]
 async fn get_api_sparql(
     //request: HttpRequest,
+    repos: web::Data<async_lock::Mutex<ReusableRepoPool>>,
     path: web::Path<u64>,
     query: web::Query<SparqlQueryParams>,
     state: web::Data<State>,
@@ -95,17 +61,26 @@ async fn get_api_sparql(
     let timestamp = path.into_inner();
     let query_params = query.into_inner();
 
+    let repo = ReusableRepoPool::pop(&repos).await;
     let start_time = Instant::now();
-    let result = query_with_cache(&state.cache, timestamp, query_params.query).await;
+    let result = query_with_cache(
+        &state.http_client,
+        &repo,
+        &state.cache,
+        timestamp,
+        query_params.query,
+    )
+    .await;
     let elapsed_millis = start_time.elapsed().as_millis();
+    ReusableRepoPool::push(repos, repo).await;
 
     match result {
         Ok(ok) => {
             PROCESSED_REQUESTS
-                .with_label_values(&["/api/sparql", "success"])
+                .with_label_values(&["GET", "/api/sparql", "success"])
                 .inc();
             RESPONSE_TIME
-                .with_label_values(&["/api/sparql", &format!("{}", ok.1)])
+                .with_label_values(&["GET", "/api/sparql", &format!("{}", ok.1)])
                 .observe(elapsed_millis as f64 / 1000.0);
             Ok(HttpResponse::Ok()
                 .content_type(mime::APPLICATION_JSON)
@@ -113,7 +88,7 @@ async fn get_api_sparql(
         }
         Err(e) => {
             PROCESSED_REQUESTS
-                .with_label_values(&["/api/sparql", "error"])
+                .with_label_values(&["GET", "/api/sparql", "error"])
                 .inc();
             Err(e)
         }
@@ -123,6 +98,7 @@ async fn get_api_sparql(
 #[get("/api/graphs/{timestamp}")]
 async fn get_api_graphs(
     //request: HttpRequest,
+    repos: web::Data<async_lock::Mutex<ReusableRepoPool>>,
     path: web::Path<u64>,
     state: web::Data<State>,
 ) -> Result<impl Responder, Error> {
@@ -130,17 +106,19 @@ async fn get_api_graphs(
 
     let timestamp = path.into_inner();
 
+    let repo = ReusableRepoPool::pop(&repos).await;
     let start_time = Instant::now();
-    let result = graphs_with_cache(&state.cache, timestamp).await;
+    let result = graphs_with_cache(&state.http_client, &repo, &state.cache, timestamp).await;
     let elapsed_millis = start_time.elapsed().as_millis();
+    ReusableRepoPool::push(repos, repo).await;
 
     match result {
         Ok(ok) => {
             PROCESSED_REQUESTS
-                .with_label_values(&["/api/graphs", "success"])
+                .with_label_values(&["GET", "/api/graphs", "success"])
                 .inc();
             RESPONSE_TIME
-                .with_label_values(&["/api/graphs", &format!("{}", ok.1)])
+                .with_label_values(&["GET", "/api/graphs", &format!("{}", ok.1)])
                 .observe(elapsed_millis as f64 / 1000.0);
             Ok(HttpResponse::Ok()
                 .content_type("text/turtle")
@@ -148,7 +126,7 @@ async fn get_api_graphs(
         }
         Err(e) => {
             PROCESSED_REQUESTS
-                .with_label_values(&["/api/graphs", "error"])
+                .with_label_values(&["GET", "/api/graphs", "error"])
                 .inc();
             Err(e)
         }
@@ -158,6 +136,7 @@ async fn get_api_graphs(
 #[derive(Clone)]
 struct State {
     cache: QueryCache,
+    http_client: reqwest::Client,
 }
 
 #[actix_web::main]
@@ -169,21 +148,17 @@ async fn main() -> std::io::Result<()> {
         .with_current_span(false)
         .init();
 
-    ReusableRepo::create_pool().unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "Unable to create repos");
-        std::process::exit(1)
-    });
-
     register_metrics();
 
-    // Fail if env vars missing
-    // let _ = API_KEY.clone();
-    // let _ = DIFF_STORE_API_KEY.clone();
-    let guard = REPO_LOCK.lock();
-    drop(guard);
+    let repo_pool = ReusableRepoPool::new(32).unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
+        std::process::exit(1)
+    });
+    let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
 
     let state = State {
-        cache: CACHE.clone(),
+        cache: QueryCache::new(),
+        http_client: reqwest::Client::new(),
     };
 
     HttpServer::new(move || {
@@ -195,6 +170,7 @@ async fn main() -> std::io::Result<()> {
                     .log_target("http"),
             )
             .app_data(web::Data::new(state.clone()))
+            .app_data(web::Data::clone(&repo_pool))
             .service(livez)
             .service(readyz)
             .service(metrics_endpoint)

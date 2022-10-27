@@ -1,54 +1,157 @@
 use std::{
-    fs, io,
-    path::Path,
-    thread,
+    env, fs,
+    io::{self, Cursor},
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
-use git2::Repository;
+use actix_web::web;
+use git2::{Commit, Repository, Signature};
+use lazy_static::lazy_static;
+use tokio::{
+    fs::{remove_file, File},
+    io::AsyncWriteExt,
+};
 
 use crate::{
     error::Error,
     metrics::{FILE_READ_TIME, REPO_CHEKOUT_TIME, REPO_FETCH_TIME},
-    GIT_REPO_URL, REPO_LOCK,
+    models,
+    rdf::pretty_print,
 };
 
-pub struct ReusableRepo {}
+lazy_static! {
+    static ref GIT_REPOS_ROOT_PATH: String = env::var("GIT_REPOS_ROOT_PATH").unwrap_or_else(|e| {
+        tracing::error!(
+            error = e.to_string().as_str(),
+            "GIT_REPOS_ROOT_PATH not found"
+        );
+        std::process::exit(1)
+    });
+    static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string().as_str(), "GIT_REPO_URL not found");
+        std::process::exit(1)
+    });
+}
 
-impl ReusableRepo {
-    pub fn get_pool() -> Result<Vec<Repository>, Error> {
-        (0..32)
-            .map(|i| Ok(Repository::open(&format!("/repo/{}", i))?))
-            .collect()
-    }
+pub struct ReusableRepoPool {
+    repos: Vec<Repository>,
+}
 
-    pub fn create_pool() -> Result<(), Error> {
-        let path = "/repo/0";
-        Repository::open(&path).or_else(|_| Repository::clone(&GIT_REPO_URL.clone(), &path))?;
-        for i in 1..32 {
-            copy_dir_all("/repo/0", format!("/repo/{}", i))?;
+impl ReusableRepoPool {
+    pub fn new(size: u64) -> Result<Self, Error> {
+        let path = format!("{}/0", GIT_REPOS_ROOT_PATH.clone());
+        Repository::clone(&GIT_REPO_URL.clone(), &path)?;
+
+        // Create n copies of the same repo, no need to clone n more times.
+        for i in 1..size {
+            copy_dir_recursive(&path, format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i))?;
         }
-        Ok(())
+
+        let repos = (0..size)
+            .map(|i| Ok(Repository::open(&format!("/repo/{}", i))?))
+            .collect::<Result<_, git2::Error>>()?;
+
+        Ok(Self { repos })
     }
 
-    async fn new() -> Repository {
+    /// Get an available repository from pool. Must call push(repo) to put it back when done.
+    pub async fn pop(pool: &web::Data<async_lock::Mutex<ReusableRepoPool>>) -> Repository {
         loop {
-            let mut repos = REPO_LOCK.lock().await;
-            if let Some(repo) = repos.pop() {
+            if let Some(repo) = pool.lock().await.repos.pop() {
                 return repo;
             }
-            drop(repos);
-            thread::sleep(Duration::from_millis(5));
+            async_std::task::sleep(Duration::from_millis(10)).await;
         }
     }
 
-    async fn recycle(repo: Repository) {
-        let mut indexes = REPO_LOCK.lock().await;
-        indexes.push(repo);
+    /// Put a repo back in pool.
+    pub async fn push(pool: web::Data<async_lock::Mutex<ReusableRepoPool>>, repo: Repository) {
+        pool.lock().await.repos.push(repo);
     }
 }
 
-fn sync_repo(repo: &Repository) -> Result<bool, Error> {
+/// Store graph.
+pub async fn store_graph(
+    repo: &Repository,
+    http_client: &reqwest::Client,
+    graph: models::Graph,
+) -> Result<(), Error> {
+    let graph_content = pretty_print(http_client, graph.graph).await?;
+
+    checkout_master_and_fetch_updates(&repo)?;
+
+    let valid_graph_filename = base64::encode(&graph.id)
+        .replace("/", "_")
+        .replace("+", "-");
+    let filename = format!("{}.ttl", valid_graph_filename);
+    let path = repo.path().join(Path::new(&filename));
+
+    let mut file = File::create(&path).await?;
+    let mut buffer = Cursor::new(graph_content);
+    file.write_all_buf(&mut buffer).await?;
+
+    commit_file(&repo, &path, format!("update: {}", graph.id)).await?;
+    push_updates(&repo)?;
+
+    Ok(())
+}
+
+/// Delete graph.
+pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
+    checkout_master_and_fetch_updates(&repo)?;
+
+    let valid_graph_filename = base64::encode(&id).replace("/", "_").replace("+", "-");
+    let filename = format!("{}.ttl", valid_graph_filename);
+    let path = repo.path().join(Path::new(&filename));
+
+    remove_file(&path).await?;
+    commit_file(&repo, &path, format!("delete: {}", id)).await?;
+    push_updates(&repo)?;
+
+    Ok(())
+}
+
+/// Fetch all graphs for a given timestamp.
+pub async fn read_all_graph_files(
+    repo: &Repository,
+    timestamp: u64,
+) -> Result<Vec<Vec<u8>>, Error> {
+    checkout_master_and_fetch_updates(&repo)?;
+
+    let result = if checkout_timestamp(&repo, timestamp)? {
+        let repo_dir = repo
+            .path()
+            .parent()
+            .ok_or::<Error>("invalid repo path".into())?;
+        read_all_files(repo_dir).await?
+    } else {
+        Vec::new()
+    };
+
+    Ok(result)
+}
+
+/// Read all files in repository's root dir. Not recursively.
+async fn read_all_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
+    let start_time = Instant::now();
+
+    let mut files = Vec::new();
+    for filepath in path.read_dir()? {
+        let filepath = filepath?;
+        if filepath.file_type()?.is_file() {
+            files.push(tokio::fs::read(filepath.path()).await?)
+        }
+    }
+
+    let elapsed_millis = start_time.elapsed().as_millis();
+    FILE_READ_TIME.observe(elapsed_millis as f64 / 1000.0);
+
+    Ok(files)
+}
+
+/// Checkout master branch and fetch updates.
+fn checkout_master_and_fetch_updates(repo: &Repository) -> Result<bool, Error> {
     let start_time = Instant::now();
 
     repo.find_remote("origin")?.fetch(&["master"], None, None)?;
@@ -80,6 +183,7 @@ fn sync_repo(repo: &Repository) -> Result<bool, Error> {
     result
 }
 
+/// Checkout a timestamp. Returns false if no files exists at that point in time.
 fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> {
     let start_time = Instant::now();
 
@@ -131,51 +235,50 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
     result
 }
 
-pub async fn fetch_graphs(timestamp: u64) -> Result<Vec<Vec<u8>>, Error> {
-    let repo = ReusableRepo::new().await;
-    sync_repo(&repo)?;
-    match checkout_timestamp(&repo, timestamp)? {
-        true => {
-            let repo_dir = repo.path().parent().ok_or::<Error>("Invalid repo".into())?;
-            let files = read_files(repo_dir).await?;
-            ReusableRepo::recycle(repo).await;
+/// Commit file.
+async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Result<(), Error> {
+    let mut index = repo.index()?;
+    index.add_path(path)?;
+    let oid = repo.index()?.write_tree()?;
+    let tree = repo.find_tree(oid)?;
 
-            Ok(files)
-        }
-        false => {
-            ReusableRepo::recycle(repo).await;
-
-            Ok(Vec::new())
-        }
-    }
-}
-
-async fn read_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
-    let start_time = Instant::now();
-
-    let mut files = Vec::new();
-    for filepath in path.read_dir()? {
-        let filepath = filepath?;
-        if filepath.file_type()?.is_file() {
-            files.push(tokio::fs::read(filepath.path()).await?)
-        }
+    let mut parents = Vec::new();
+    if let Some(parent) = repo.head()?.target() {
+        parents.push(repo.find_commit(parent)?);
     }
 
-    let elapsed_millis = start_time.elapsed().as_millis();
-    FILE_READ_TIME.observe(elapsed_millis as f64 / 1000.0);
+    let commiter = Signature::now("rdf-diff-store", "fellesdatakatalog@digdir.no")?;
+    repo.commit(
+        Some("HEAD"),
+        &commiter,
+        &commiter,
+        message.as_str(),
+        &tree,
+        parents.iter().collect::<Vec<&Commit>>().as_slice(),
+    )?;
 
-    Ok(files)
+    Ok(())
 }
 
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
-    fs::create_dir_all(&dst)?;
-    for entry in fs::read_dir(src)? {
+/// Push commits.
+fn push_updates(repo: &Repository) -> Result<(), Error> {
+    repo.find_remote("origin")?
+        .push(&["refs/heads/master:refs/heads/master"], None)?;
+
+    Ok(())
+}
+
+/// Copy folder recursively.
+fn copy_dir_recursive(source: impl AsRef<Path>, destination: impl AsRef<Path>) -> io::Result<()> {
+    fs::create_dir_all(&destination)?;
+    for entry in fs::read_dir(source)? {
         let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        let file_type = entry.file_type()?;
+        let target = destination.as_ref().join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_recursive(entry.path(), target)?;
         } else {
-            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+            fs::copy(entry.path(), target)?;
         }
     }
     Ok(())
