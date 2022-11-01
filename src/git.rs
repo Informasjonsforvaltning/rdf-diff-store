@@ -82,11 +82,11 @@ impl ReusableRepoPool {
 pub async fn store_graph(
     repo: &Repository,
     http_client: &reqwest::Client,
-    graph: models::Graph,
+    graph: &models::Graph,
 ) -> Result<(), Error> {
-    let graph_content = pretty_print(http_client, graph.graph).await?;
+    let graph_content = pretty_print(http_client, &graph.graph).await?;
 
-    checkout_master_and_fetch_updates(&repo)?;
+    fetch_updates(&repo)?;
 
     let valid_graph_filename = base64::encode(&graph.id)
         .replace("/", "_")
@@ -101,6 +101,7 @@ pub async fn store_graph(
     let mut file = File::create(&path).await?;
     let mut buffer = Cursor::new(graph_content);
     file.write_all_buf(&mut buffer).await?;
+    file.shutdown().await?;
 
     commit_file(
         &repo,
@@ -115,7 +116,7 @@ pub async fn store_graph(
 
 /// Delete graph.
 pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
-    checkout_master_and_fetch_updates(&repo)?;
+    fetch_updates(&repo)?;
 
     let valid_graph_filename = base64::encode(&id).replace("/", "_").replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
@@ -133,7 +134,7 @@ pub async fn read_all_graph_files(
     repo: &Repository,
     timestamp: u64,
 ) -> Result<Vec<Vec<u8>>, Error> {
-    checkout_master_and_fetch_updates(&repo)?;
+    fetch_updates(&repo)?;
 
     let result = if checkout_timestamp(&repo, timestamp)? {
         let repo_dir = repo
@@ -155,7 +156,13 @@ async fn read_all_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
     let mut files = Vec::new();
     for filepath in path.read_dir()? {
         let filepath = filepath?;
-        if filepath.file_type()?.is_file() {
+        if filepath.file_type()?.is_file()
+            && filepath
+                .file_name()
+                .into_string()
+                .map_err(|_| Error::String("filename err".to_string()))?
+                .ends_with(".ttl")
+        {
             files.push(tokio::fs::read(filepath.path()).await?)
         }
     }
@@ -166,29 +173,24 @@ async fn read_all_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
     Ok(files)
 }
 
-/// Checkout master branch and fetch updates.
-fn checkout_master_and_fetch_updates(repo: &Repository) -> Result<bool, Error> {
+/// Fetch updates.
+fn fetch_updates(repo: &Repository) -> Result<bool, Error> {
     let start_time = Instant::now();
 
     repo.find_remote("origin")?.fetch(&["main"], None, None)?;
 
-    // repo.find_reference() fails when empty repo is cloned and no commits exist.
-    let fetch_head = repo.find_reference("FETCH_HEAD");
-    if let Err(_) = fetch_head {
-        return Ok(false);
-    }
-    let fetch_head = fetch_head?;
+    let fetch_head = repo.find_reference("FETCH_HEAD")?;
 
     let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
+    let refname = "refs/heads/main";
     let result = if analysis.0.is_up_to_date() {
         Ok(false)
     } else if analysis.0.is_fast_forward() {
-        let refname = format!("refs/heads/main");
-        let mut reference = repo.find_reference(&refname)?;
+        let mut reference = repo.find_reference(refname)?;
         reference.set_target(fetch_commit.id(), "Fast-Forward")?;
-        repo.set_head(&refname)?;
+        repo.set_head(refname)?;
         repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
         Ok(true)
     } else {

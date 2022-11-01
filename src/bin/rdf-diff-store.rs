@@ -51,7 +51,7 @@ async fn post_api_graphs(
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
-    let result = store_graph(&repo, &state.http_client, graph).await;
+    let result = store_graph(&repo, &state.http_client, &graph).await;
     ReusableRepoPool::push(repos, repo).await;
 
     let elapsed_millis = start_time.elapsed().as_millis();

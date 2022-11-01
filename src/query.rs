@@ -39,7 +39,7 @@ pub async fn graphs_with_cache(
         Ok((graphs, 1))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = pretty_print(&http_client, to_turtle(&graph_store)?).await?;
+        let graphs = pretty_print(&http_client, to_turtle(&graph_store)?.as_str()).await?;
 
         cache.store_cache.insert(timestamp, graph_store);
         cache.graphs_cache.insert(timestamp, graphs.clone());
@@ -67,7 +67,7 @@ pub async fn query_with_cache(
         Ok((query_result, 1))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = pretty_print(http_client, to_turtle(&graph_store)?).await?;
+        let graphs = pretty_print(http_client, to_turtle(&graph_store)?.as_str()).await?;
         let query_result = execute_query_in_store(&graph_store, &query)?;
 
         cache.store_cache.insert(timestamp, graph_store);

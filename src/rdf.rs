@@ -21,8 +21,8 @@ pub fn to_turtle(store: &oxigraph::store::Store) -> Result<String, Error> {
     Ok(turtle)
 }
 
-pub async fn pretty_print(_http_client: &reqwest::Client, graph: String) -> Result<String, Error> {
-    return Ok(graph);
+pub async fn pretty_print(_http_client: &reqwest::Client, graph: &str) -> Result<String, Error> {
+    return Ok(graph.to_string());
 
     // FIXME: Use prettyprint api
 
