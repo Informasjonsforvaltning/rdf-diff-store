@@ -10,7 +10,7 @@ use actix_web::{
 use rdf_diff_store::{
     api::validate_api_key,
     error::Error,
-    git::{delete_graph, store_graph, ReusableRepoPool},
+    git::{delete_graph, store_graph, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     metrics::PROCESSED_REQUESTS,
     metrics::{get_metrics, register_metrics, RESPONSE_TIME},
     models,
@@ -133,7 +133,7 @@ async fn main() -> std::io::Result<()> {
     register_metrics();
 
     // Only 1 (basically a lock) to avoid multiple writes and conflicts
-    let repo_pool = ReusableRepoPool::new(1).unwrap_or_else(|e| {
+    let repo_pool = ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
         std::process::exit(1)
     });

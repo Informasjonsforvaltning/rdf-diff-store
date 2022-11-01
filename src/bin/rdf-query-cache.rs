@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
-use rdf_diff_store::git::ReusableRepoPool;
+use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
 use rdf_diff_store::metrics::CACHE_COUNT;
 
 use rdf_diff_store::{
@@ -150,7 +150,7 @@ async fn main() -> std::io::Result<()> {
 
     register_metrics();
 
-    let repo_pool = ReusableRepoPool::new(32).unwrap_or_else(|e| {
+    let repo_pool = ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 32).unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
         std::process::exit(1)
     });

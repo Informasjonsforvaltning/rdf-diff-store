@@ -29,7 +29,6 @@ components:
           type: string
       required:
         - id
-        - format
         - graph
 
 paths:

@@ -21,13 +21,14 @@ use crate::{
 };
 
 lazy_static! {
-    static ref GIT_REPOS_ROOT_PATH: String = env::var("GIT_REPOS_ROOT_PATH").unwrap_or_else(|e| {
-        tracing::error!(
-            error = e.to_string().as_str(),
-            "GIT_REPOS_ROOT_PATH not found"
-        );
-        std::process::exit(1)
-    });
+    pub static ref GIT_REPOS_ROOT_PATH: String =
+        env::var("GIT_REPOS_ROOT_PATH").unwrap_or_else(|e| {
+            tracing::error!(
+                error = e.to_string().as_str(),
+                "GIT_REPOS_ROOT_PATH not found"
+            );
+            std::process::exit(1)
+        });
     static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "GIT_REPO_URL not found");
         std::process::exit(1)
@@ -39,8 +40,8 @@ pub struct ReusableRepoPool {
 }
 
 impl ReusableRepoPool {
-    pub fn new(size: u64) -> Result<Self, Error> {
-        let path = format!("{}/0", GIT_REPOS_ROOT_PATH.clone());
+    pub fn new(root_path: String, size: u64) -> Result<Self, Error> {
+        let path = format!("{}/0", root_path);
         Repository::clone(&GIT_REPO_URL.clone(), &path)?;
 
         // Create n copies of the same repo, no need to clone n more times.
@@ -49,7 +50,13 @@ impl ReusableRepoPool {
         }
 
         let repos = (0..size)
-            .map(|i| Ok(Repository::open(&format!("/repo/{}", i))?))
+            .map(|i| {
+                Ok(Repository::open(&format!(
+                    "{}/{}",
+                    GIT_REPOS_ROOT_PATH.clone(),
+                    i
+                ))?)
+            })
             .collect::<Result<_, git2::Error>>()?;
 
         Ok(Self { repos })
@@ -85,13 +92,22 @@ pub async fn store_graph(
         .replace("/", "_")
         .replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
-    let path = repo.path().join(Path::new(&filename));
+    let path = repo
+        .path()
+        .parent()
+        .ok_or::<Error>("invalid repo path".into())?
+        .join(Path::new(&filename));
 
     let mut file = File::create(&path).await?;
     let mut buffer = Cursor::new(graph_content);
     file.write_all_buf(&mut buffer).await?;
 
-    commit_file(&repo, &path, format!("update: {}", graph.id)).await?;
+    commit_file(
+        &repo,
+        &Path::new(&filename).into(),
+        format!("update: {}", graph.id),
+    )
+    .await?;
     push_updates(&repo)?;
 
     Ok(())
@@ -154,16 +170,22 @@ async fn read_all_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
 fn checkout_master_and_fetch_updates(repo: &Repository) -> Result<bool, Error> {
     let start_time = Instant::now();
 
-    repo.find_remote("origin")?.fetch(&["master"], None, None)?;
+    repo.find_remote("origin")?.fetch(&["main"], None, None)?;
 
-    let fetch_head = repo.find_reference("FETCH_HEAD")?;
+    // repo.find_reference() fails when empty repo is cloned and no commits exist.
+    let fetch_head = repo.find_reference("FETCH_HEAD");
+    if let Err(_) = fetch_head {
+        return Ok(false);
+    }
+    let fetch_head = fetch_head?;
+
     let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
     let result = if analysis.0.is_up_to_date() {
         Ok(false)
     } else if analysis.0.is_fast_forward() {
-        let refname = format!("refs/heads/master");
+        let refname = format!("refs/heads/main");
         let mut reference = repo.find_reference(&refname)?;
         reference.set_target(fetch_commit.id(), "Fast-Forward")?;
         repo.set_head(&refname)?;
@@ -237,13 +259,18 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
 
 /// Commit file.
 async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Result<(), Error> {
-    let mut index = repo.index()?;
-    index.add_path(path)?;
-    let oid = repo.index()?.write_tree()?;
-    let tree = repo.find_tree(oid)?;
+    let tree_id = {
+        let mut index = repo.index()?;
+
+        index.add_path(path)?;
+        index.write_tree()?
+    };
+
+    let tree = repo.find_tree(tree_id)?;
 
     let mut parents = Vec::new();
-    if let Some(parent) = repo.head()?.target() {
+    // repo.head() fails when empty repo is cloned and no commits exist.
+    if let Ok(Some(parent)) = repo.head().map(|r| r.target()) {
         parents.push(repo.find_commit(parent)?);
     }
 
@@ -263,7 +290,7 @@ async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Resu
 /// Push commits.
 fn push_updates(repo: &Repository) -> Result<(), Error> {
     repo.find_remote("origin")?
-        .push(&["refs/heads/master:refs/heads/master"], None)?;
+        .push(&["refs/heads/main:refs/heads/main"], None)?;
 
     Ok(())
 }

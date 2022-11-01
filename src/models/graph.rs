@@ -15,17 +15,17 @@
 pub struct Graph {
     #[serde(rename = "id")]
     pub id: String,
-    #[serde(rename = "format")]
-    pub format: String,
+    #[serde(rename = "format", skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
     #[serde(rename = "graph")]
     pub graph: String,
 }
 
 impl Graph {
-    pub fn new(id: String, format: String, graph: String) -> Graph {
+    pub fn new(id: String, graph: String) -> Graph {
         Graph {
             id,
-            format,
+            format: None,
             graph,
         }
     }
