@@ -177,34 +177,56 @@ async fn read_all_files(path: &Path) -> Result<Vec<Vec<u8>>, Error> {
 fn fetch_updates(repo: &Repository) -> Result<bool, Error> {
     let start_time = Instant::now();
 
+    let refname = "refs/heads/main";
+    if let Err(e) = repo.head() {
+        // Default ref is master, swap to main.
+        if e.message() == "reference 'refs/heads/master' not found" {
+            repo.set_head(refname)?;
+        }
+    }
+
     repo.find_remote("origin")?.fetch(&["main"], None, None)?;
 
-    let fetch_head = repo.find_reference("FETCH_HEAD")?;
+    let updated = if let Ok(fetch_head) = repo.find_reference("FETCH_HEAD") {
+        let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
+        let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
-    let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
-    let analysis = repo.merge_analysis(&[&fetch_commit])?;
+        if analysis.0.is_up_to_date() {
+            Ok(false)
+        } else if analysis.0.is_fast_forward() {
+            repo.find_reference(refname)
+                .and_then(|mut reference| {
+                    reference.set_target(fetch_commit.id(), "Fast-Forward")?;
+                    Ok(reference)
+                })
+                // Reference might not exist when cloned repo is empty.
+                .or_else(|_| repo.reference(refname, fetch_commit.id(), true, ""))?;
 
-    let refname = "refs/heads/main";
-    let result = if analysis.0.is_up_to_date() {
-        Ok(false)
-    } else if analysis.0.is_fast_forward() {
-        let mut reference = repo.find_reference(refname)?;
-        reference.set_target(fetch_commit.id(), "Fast-Forward")?;
-        repo.set_head(refname)?;
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-        Ok(true)
+            repo.set_head(refname)?;
+            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+            Ok(true)
+        } else {
+            Err("Not able to fast-forward repo.".into())
+        }
     } else {
-        Err("Not able to fast-forward repo.".into())
+        Ok(false)
     };
 
+    // if let Ok(false) = updated {
+    //     if let Ok(obj) = repo.revparse_single(&refname) {
+    //         repo.set_head(&refname)?;
+    //         repo.checkout_tree(&obj, None)?;
+    //     }
+    // }
+
     let elapsed_millis = start_time.elapsed().as_millis();
-    if let Ok(change) = result {
+    if let Ok(change) = updated {
         REPO_FETCH_TIME
             .with_label_values(&[&format!("{}", change)])
             .observe(elapsed_millis as f64 / 1000.0);
     }
 
-    result
+    updated
 }
 
 /// Checkout a timestamp. Returns false if no files exists at that point in time.
@@ -242,9 +264,8 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
             }
 
             let refname = format!("refs/heads/{}", &oid.to_string());
-            let obj = repo.revparse_single(&refname)?;
-            repo.checkout_tree(&obj, None)?;
             repo.set_head(&refname)?;
+            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
             Ok(true)
         }
     };
@@ -261,26 +282,24 @@ fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> 
 
 /// Commit file.
 async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Result<(), Error> {
-    let tree_id = {
-        let mut index = repo.index()?;
+    let mut index = repo.index()?;
+    index.add_path(path)?;
+    index.write()?;
 
-        index.add_path(path)?;
-        index.write_tree()?
-    };
-
+    let tree_id = index.write_tree()?;
     let tree = repo.find_tree(tree_id)?;
 
     let mut parents = Vec::new();
-    // repo.head() fails when empty repo is cloned and no commits exist.
+    // repo.head() fails when empty repo is cloned and no commits exist. In that case, there is no parents.
     if let Ok(Some(parent)) = repo.head().map(|r| r.target()) {
         parents.push(repo.find_commit(parent)?);
     }
 
-    let commiter = Signature::now("rdf-diff-store", "fellesdatakatalog@digdir.no")?;
+    let signature = Signature::now("rdf-diff-store", "fellesdatakatalog@digdir.no")?;
     repo.commit(
         Some("HEAD"),
-        &commiter,
-        &commiter,
+        &signature,
+        &signature,
         message.as_str(),
         &tree,
         parents.iter().collect::<Vec<&Commit>>().as_slice(),
