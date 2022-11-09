@@ -8,6 +8,16 @@ use rdf_diff_store::{
     rdf::{NoOpPrettyPrinter, PrettyPrint},
 };
 
+#[test]
+fn setup() {
+    if let Err(_) = std::env::var("GIT_REPO_URL") {
+        std::env::set_var(
+            "GIT_REPO_URL",
+            "http://gitea:gitea123@localhost:3000/gitea/diff-store.git",
+        );
+    }
+}
+
 /// Store one graph, then store another, then check that graphs retured for the
 /// three timestamps are correct. The three timestamps beeing: before first
 /// graph is created, before second is created and after both are created.
