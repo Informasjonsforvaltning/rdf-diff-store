@@ -4,6 +4,7 @@ use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Res
 use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
 use rdf_diff_store::metrics::CACHE_COUNT;
 
+use rdf_diff_store::rdf::{APIPrettyPrinter, PrettyPrint};
 use rdf_diff_store::{
     error::Error,
     metrics::{get_metrics, register_metrics, PROCESSED_REQUESTS, RESPONSE_TIME},
@@ -64,7 +65,7 @@ async fn get_api_sparql(
     let repo = ReusableRepoPool::pop(&repos).await;
     let start_time = Instant::now();
     let result = query_with_cache(
-        &state.http_client,
+        &state.pretty_printer,
         &repo,
         &state.cache,
         timestamp,
@@ -72,7 +73,7 @@ async fn get_api_sparql(
     )
     .await;
     let elapsed_millis = start_time.elapsed().as_millis();
-    ReusableRepoPool::push(repos, repo).await;
+    ReusableRepoPool::push(&repos, repo).await;
 
     match result {
         Ok(ok) => {
@@ -108,9 +109,9 @@ async fn get_api_graphs(
 
     let repo = ReusableRepoPool::pop(&repos).await;
     let start_time = Instant::now();
-    let result = graphs_with_cache(&state.http_client, &repo, &state.cache, timestamp).await;
+    let result = graphs_with_cache(&state.pretty_printer, &repo, &state.cache, timestamp).await;
     let elapsed_millis = start_time.elapsed().as_millis();
-    ReusableRepoPool::push(repos, repo).await;
+    ReusableRepoPool::push(&repos, repo).await;
 
     match result {
         Ok(ok) => {
@@ -136,7 +137,7 @@ async fn get_api_graphs(
 #[derive(Clone)]
 struct State {
     cache: QueryCache,
-    http_client: reqwest::Client,
+    pretty_printer: APIPrettyPrinter,
 }
 
 #[actix_web::main]
@@ -158,7 +159,7 @@ async fn main() -> std::io::Result<()> {
 
     let state = State {
         cache: QueryCache::new(),
-        http_client: reqwest::Client::new(),
+        pretty_printer: APIPrettyPrinter::new(),
     };
 
     HttpServer::new(move || {

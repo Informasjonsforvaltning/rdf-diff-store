@@ -10,10 +10,12 @@ use actix_web::{
 use rdf_diff_store::{
     api::validate_api_key,
     error::Error,
-    git::{delete_graph, store_graph, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
+    git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH},
+    graphs::{delete_graph, store_graph},
     metrics::PROCESSED_REQUESTS,
     metrics::{get_metrics, register_metrics, RESPONSE_TIME},
     models,
+    rdf::{APIPrettyPrinter, PrettyPrint},
 };
 
 #[get("/livez")]
@@ -51,8 +53,8 @@ async fn post_api_graphs(
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
-    let result = store_graph(&repo, &state.http_client, &graph).await;
-    ReusableRepoPool::push(repos, repo).await;
+    let result = store_graph(&repo, &state.pretty_printer, &graph).await;
+    ReusableRepoPool::push(&repos, repo).await;
 
     let elapsed_millis = start_time.elapsed().as_millis();
 
@@ -93,7 +95,7 @@ async fn delete_api_graphs(
 
     let repo = ReusableRepoPool::pop(&repos).await;
     let result = delete_graph(&repo, query_params.id).await;
-    ReusableRepoPool::push(repos, repo).await;
+    ReusableRepoPool::push(&repos, repo).await;
 
     let elapsed_millis = start_time.elapsed().as_millis();
 
@@ -118,7 +120,7 @@ async fn delete_api_graphs(
 
 #[derive(Clone)]
 struct State {
-    http_client: reqwest::Client,
+    pretty_printer: APIPrettyPrinter,
 }
 
 #[actix_web::main]
@@ -140,7 +142,7 @@ async fn main() -> std::io::Result<()> {
     let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
 
     let state = State {
-        http_client: reqwest::Client::new(),
+        pretty_printer: APIPrettyPrinter::new(),
     };
 
     HttpServer::new(move || {

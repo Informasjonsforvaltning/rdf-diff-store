@@ -6,9 +6,9 @@ use oxigraph::{io::GraphFormat, model::GraphNameRef, sparql::QueryResultsFormat}
 
 use crate::{
     error::Error,
-    git::read_all_graph_files,
+    graphs::read_all_graph_files,
     metrics::{GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
-    rdf::{pretty_print, to_turtle},
+    rdf::{to_turtle, PrettyPrint},
 };
 
 #[derive(Clone)]
@@ -29,8 +29,8 @@ impl QueryCache {
 }
 
 /// Get graphs with cache. Return cache level alongside raw graph string.
-pub async fn graphs_with_cache(
-    http_client: &reqwest::Client,
+pub async fn graphs_with_cache<P: PrettyPrint>(
+    pretty_printer: &P,
     repo: &Repository,
     cache: &QueryCache,
     timestamp: u64,
@@ -39,7 +39,9 @@ pub async fn graphs_with_cache(
         Ok((graphs, 1))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = pretty_print(&http_client, to_turtle(&graph_store)?.as_str()).await?;
+        let graphs = pretty_printer
+            .pretty_print(to_turtle(&graph_store)?.as_str())
+            .await?;
 
         cache.store_cache.insert(timestamp, graph_store);
         cache.graphs_cache.insert(timestamp, graphs.clone());
@@ -49,8 +51,8 @@ pub async fn graphs_with_cache(
 }
 
 /// Query timestamp with cache. Return cache level alongside raw JSON result string.
-pub async fn query_with_cache(
-    http_client: &reqwest::Client,
+pub async fn query_with_cache<P: PrettyPrint>(
+    pretty_printer: &P,
     repo: &Repository,
     cache: &QueryCache,
     timestamp: u64,
@@ -67,7 +69,9 @@ pub async fn query_with_cache(
         Ok((query_result, 1))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = pretty_print(http_client, to_turtle(&graph_store)?.as_str()).await?;
+        let graphs = pretty_printer
+            .pretty_print(to_turtle(&graph_store)?.as_str())
+            .await?;
         let query_result = execute_query_in_store(&graph_store, &query)?;
 
         cache.store_cache.insert(timestamp, graph_store);

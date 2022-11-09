@@ -12,7 +12,7 @@ lazy_static! {
     });
 }
 
-/// Returns an error if X-API-KEY header does not match API_KEY env var.
+/// Returns an error if X-API-KEY header does not match API_KEY environment variable.
 pub fn validate_api_key(request: HttpRequest) -> Result<(), Error> {
     let token = request
         .headers()
