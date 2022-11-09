@@ -10,11 +10,14 @@ jobs:
   test:
     name: Run tests when pull request is created
     if: github.event.pull_request.draft == false
-    uses: Informasjonsforvaltning/workflows/.github/workflows/test-rust.yaml@main
+    uses: Informasjonsforvaltning/workflows/.github/workflows/test-rust.yaml@chore/hos/test-rust-env
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
       cargo_args: -- --test-threads 1
+      rust_env: |
+        GIT_REPOS_ROOT_PATH=./tmp-repos
+        GIT_REPO_URL=http://gitea:gitea123@localhost:3000/gitea/diff-store.git
 
   build:
     name: Build with reusable workflow when pull request is created
