@@ -10,7 +10,7 @@ jobs:
   test:
     name: Run tests when pull request is created
     if: github.event.pull_request.draft == false
-    uses: Informasjonsforvaltning/workflows/.github/workflows/test-rust.yaml@chore/hos/test-rust-env
+    uses: Informasjonsforvaltning/workflows/.github/workflows/test-rust.yaml@main
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
