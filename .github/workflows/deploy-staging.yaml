@@ -20,7 +20,7 @@ jobs:
         GIT_REPO_URL=http://gitea:gitea123@localhost:3000/gitea/diff-store.git
 
   build-diff-store:
-    name: Build difd-store when pull request is created
+    name: Build diff-store when pull request is created
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
@@ -33,7 +33,7 @@ jobs:
       GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
 
   build-query-cache:
-    name: Build query cache when pull request is created
+    name: Build query-cache when pull request is created
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:

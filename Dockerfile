@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY ./ ./
 
-ARG BINARY=rdf-diff-store
+ARG BINARY
 RUN cargo build --release --bin ${BINARY}
 
 
