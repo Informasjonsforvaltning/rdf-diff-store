@@ -6,7 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang
 
 COPY ./ ./
-RUN cargo build --release
+
+ARG BINARY=rdf-diff-store
+RUN cargo build --release --bin ${BINARY}
 
 
 FROM rust:latest
@@ -14,6 +16,7 @@ FROM rust:latest
 ENV TZ=Europe/Oslo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-COPY --from=builder /build/target/release/rdf-query-cache /rdf-query-cache
+ARG BINARY
+COPY --from=builder /build/target/release/${BINARY} /release
 
-CMD ["/rdf-query-cache"]
+CMD ["/release"]
