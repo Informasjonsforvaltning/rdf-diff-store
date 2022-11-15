@@ -25,6 +25,13 @@ spec:
                 secretKeyRef:
                   name: fdk-dataset-rdf-diff-store
                   key: GIT_REPO_URL
+            - name: RDF_PRETTIFIER_URL
+              value: http://rdf-prettifier/api/prettify
+            - name: RDF_PRETTIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: API_KEY
+                  name: rdf-prettifier
             - name: API_KEY
               valueFrom:
                 secretKeyRef:

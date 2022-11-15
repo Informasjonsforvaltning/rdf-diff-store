@@ -15,7 +15,7 @@ use rdf_diff_store::{
     metrics::PROCESSED_REQUESTS,
     metrics::{get_metrics, register_metrics, RESPONSE_TIME},
     models,
-    rdf::{APIPrettyPrinter, PrettyPrint},
+    rdf::{APIPrettifier, RdfPrettifier},
 };
 
 #[get("/livez")]
@@ -53,7 +53,7 @@ async fn post_api_graphs(
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
-    let result = store_graph(&repo, &state.pretty_printer, &graph).await;
+    let result = store_graph(&repo, &state.rdf_prettifier, &graph).await;
     ReusableRepoPool::push(&repos, repo).await;
 
     let elapsed_millis = start_time.elapsed().as_millis();
@@ -120,7 +120,7 @@ async fn delete_api_graphs(
 
 #[derive(Clone)]
 struct State {
-    pretty_printer: APIPrettyPrinter,
+    rdf_prettifier: APIPrettifier,
 }
 
 #[actix_web::main]
@@ -142,7 +142,7 @@ async fn main() -> std::io::Result<()> {
     let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
 
     let state = State {
-        pretty_printer: APIPrettyPrinter::new(),
+        rdf_prettifier: APIPrettifier::new(),
     };
 
     HttpServer::new(move || {

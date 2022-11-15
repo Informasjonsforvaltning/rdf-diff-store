@@ -5,7 +5,7 @@ use rdf_diff_store::{
     git::ReusableRepoPool,
     graphs::{read_all_graph_files, store_graph},
     models::Graph,
-    rdf::{NoOpPrettyPrinter, PrettyPrint},
+    rdf::{NoOpPrettifier, RdfPrettifier},
 };
 
 /// Store one graph, then store another, then check that graphs retured for the
@@ -36,7 +36,7 @@ async fn test() {
         .as_secs()
         - 1;
 
-    store_graph(&push_repo, &NoOpPrettyPrinter::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
         .await
         .expect("unable to store graph");
 
@@ -51,7 +51,7 @@ async fn test() {
 
     std::thread::sleep(Duration::from_secs(1));
 
-    store_graph(&push_repo, &NoOpPrettyPrinter::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
         .await
         .expect("unable to store graph");
 

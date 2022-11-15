@@ -12,7 +12,7 @@ use crate::{
     git::{checkout_main_and_fetch_updates, checkout_timestamp, commit_file, push_updates},
     metrics::FILE_READ_TIME,
     models,
-    rdf::PrettyPrint,
+    rdf::RdfPrettifier,
 };
 
 lazy_static! {
@@ -31,12 +31,12 @@ lazy_static! {
 }
 
 /// Store graph.
-pub async fn store_graph<P: PrettyPrint>(
+pub async fn store_graph<P: RdfPrettifier>(
     repo: &Repository,
-    pretty_printer: &P,
+    rdf_prettifier: &P,
     graph: &models::Graph,
 ) -> Result<(), Error> {
-    let graph_content = pretty_printer.pretty_print(&graph.graph).await?;
+    let graph_content = rdf_prettifier.prettify(&graph.graph).await?;
 
     checkout_main_and_fetch_updates(&repo)?;
 

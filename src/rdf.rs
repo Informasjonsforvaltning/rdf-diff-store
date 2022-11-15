@@ -9,31 +9,43 @@ use serde_json::json;
 use crate::error::Error;
 
 lazy_static! {
-    static ref PRETTY_PRINT_URL: String = env::var("PRETTY_PRINT_URL").unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "PRETTY_PRINT_URL not found");
+    static ref RDF_PRETTIFIER_URL: String = env::var("RDF_PRETTIFIER_URL").unwrap_or_else(|e| {
+        tracing::error!(
+            error = e.to_string().as_str(),
+            "RDF_PRETTIFIER_URL not found"
+        );
         std::process::exit(1)
     });
+    static ref RDF_PRETTIFIER_API_KEY: String =
+        env::var("RDF_PRETTIFIER_API_KEY").unwrap_or_else(|e| {
+            tracing::error!(
+                error = e.to_string().as_str(),
+                "RDF_PRETTIFIER_API_KEY not found"
+            );
+            std::process::exit(1)
+        });
 }
 
 #[async_trait]
-pub trait PrettyPrint {
+pub trait RdfPrettifier {
     fn new() -> Self;
-    async fn pretty_print(&self, graph: &str) -> Result<String, Error>;
+    async fn prettify(&self, graph: &str) -> Result<String, Error>;
 }
 
 #[derive(Clone)]
-pub struct APIPrettyPrinter(reqwest::Client);
+pub struct APIPrettifier(reqwest::Client);
 
 #[async_trait]
-impl PrettyPrint for APIPrettyPrinter {
+impl RdfPrettifier for APIPrettifier {
     fn new() -> Self {
-        APIPrettyPrinter(reqwest::Client::new())
+        APIPrettifier(reqwest::Client::new())
     }
 
-    async fn pretty_print(&self, graph: &str) -> Result<String, Error> {
+    async fn prettify(&self, graph: &str) -> Result<String, Error> {
         let response = self
             .0
-            .post(format!("{}/api/prettify", PRETTY_PRINT_URL.clone()))
+            .post(RDF_PRETTIFIER_URL.clone())
+            .header("X-API-KEY", RDF_PRETTIFIER_API_KEY.clone())
             .json(&json!({
                 "format": "text/turtle",
                 "output_format": "text/turtle",
@@ -54,15 +66,15 @@ impl PrettyPrint for APIPrettyPrinter {
     }
 }
 
-pub struct NoOpPrettyPrinter {}
+pub struct NoOpPrettifier {}
 
 #[async_trait]
-impl PrettyPrint for NoOpPrettyPrinter {
+impl RdfPrettifier for NoOpPrettifier {
     fn new() -> Self {
-        NoOpPrettyPrinter {}
+        NoOpPrettifier {}
     }
 
-    async fn pretty_print(&self, graph: &str) -> Result<String, Error> {
+    async fn prettify(&self, graph: &str) -> Result<String, Error> {
         Ok(graph.to_string())
     }
 }
