@@ -2,27 +2,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fdk-dataset-query-cache
+  name: fdk-dataset-rdf-query-cache
   namespace: staging
   labels:
-    app: fdk-dataset-query-cache
+    app: fdk-dataset-rdf-query-cache
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fdk-dataset-query-cache
+      app: fdk-dataset-rdf-query-cache
   template:
     metadata:
       labels:
-        app: fdk-dataset-query-cache
+        app: fdk-dataset-rdf-query-cache
     spec:
       containers:
         - env:
+            - name: GIT_REPOS_ROOT_PATH
+              value: /repos
             - name: GIT_REPO_URL
               valueFrom:
                 secretKeyRef:
-                  name: fdk-dataset-diff-store
+                  name: fdk-dataset-rdf-diff-store
                   key: GIT_REPO_URL
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-dataset-rdf-diff-store
+                  key: API_KEY
           name: fdk-dataset-query-cache
           image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
           imagePullPolicy: Always

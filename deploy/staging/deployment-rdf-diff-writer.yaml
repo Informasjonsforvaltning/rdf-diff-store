@@ -2,29 +2,36 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fdk-dataset-diff-store
+  name: fdk-dataset-rdf-diff-writer
   namespace: staging
   labels:
-    app: fdk-dataset-diff-store
+    app: fdk-dataset-rdf-diff-writer
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fdk-dataset-diff-store
+      app: fdk-dataset-rdf-diff-writer
   template:
     metadata:
       labels:
-        app: fdk-dataset-diff-store
+        app: fdk-dataset-rdf-diff-writer
     spec:
       containers:
         - env:
+            - name: GIT_REPOS_ROOT_PATH
+              value: /repos
             - name: GIT_REPO_URL
               valueFrom:
                 secretKeyRef:
-                  name: fdk-dataset-diff-store
+                  name: fdk-dataset-rdf-diff-store
                   key: GIT_REPO_URL
-          name: fdk-dataset-diff-store
-          image: eu.gcr.io/digdir-fdk-infra/rdf-diff-store:staging_latest
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-dataset-rdf-diff-store
+                  key: API_KEY
+          name: fdk-dataset-rdf-diff-writer
+          image: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer:staging_latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

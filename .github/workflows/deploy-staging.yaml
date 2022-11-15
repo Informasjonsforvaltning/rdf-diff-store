@@ -19,21 +19,21 @@ jobs:
         GIT_REPOS_ROOT_PATH=./tmp-repos
         GIT_REPO_URL=http://gitea:gitea123@localhost:3000/gitea/diff-store.git
 
-  build-diff-store:
-    name: Build diff-store when pull request is created
+  build-rdf-diff-writer:
+    name: Build diff-writer when pull request is created
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
-      app_name: rdf-diff-store
+      app_name: rdf-diff-writer
       environment: staging
       build_env: true
       build_env_name: BINARY
-      build_env_value: rdf-diff-store
+      build_env_value: rdf-diff-writer
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
 
-  build-query-cache:
+  build-rdf-query-cache:
     name: Build query-cache when pull request is created
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
@@ -50,7 +50,7 @@ jobs:
   deploy:
     name: Deploy to staging environment with reusable workflow
     if: github.event.pull_request.draft == false
-    needs: [test, build-diff-store, build-query-cache]
+    needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
       app_name: rdf-query-cache

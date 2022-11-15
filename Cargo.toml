@@ -2,7 +2,7 @@
 name = "rdf-diff-store"
 version = "0.1.0"
 edition = "2021"
-default-run = "rdf-diff-store"
+default-run = "rdf-diff-writer"
 
 [dependencies]
 actix-web = "4.1.0"
