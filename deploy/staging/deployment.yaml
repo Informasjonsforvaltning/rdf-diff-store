@@ -19,7 +19,10 @@ spec:
       containers:
         - env:
             - name: GIT_REPO_URL
-              value: http://staging-gitea-http:3000/gitea_admin/dataset-diff-store.git
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-dataset-diff-store
+                  key: GIT_REPO_URL
           name: fdk-dataset-query-cache
           image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
           imagePullPolicy: Always
