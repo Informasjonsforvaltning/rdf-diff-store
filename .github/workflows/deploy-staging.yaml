@@ -26,6 +26,7 @@ jobs:
     with:
       app_name: rdf-diff-store
       environment: staging
+      build_env: true
       build_env_name: BINARY
       build_env_value: rdf-diff-store
     secrets:
@@ -39,6 +40,7 @@ jobs:
     with:
       app_name: rdf-query-cache
       environment: staging
+      build_env: true
       build_env_name: BINARY
       build_env_value: rdf-query-cache
     secrets:
