@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 
 use crate::{
     error::Error,
-    metrics::{REPO_CHEKOUT_TIME, REPO_FETCH_TIME},
+    metrics::{REPO_CHEKOUT_TIME, REPO_COMMIT_TIME, REPO_FETCH_TIME, REPO_PUSH_TIME},
 };
 
 lazy_static! {
@@ -174,6 +174,8 @@ pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Err
 
 /// Commit file.
 pub async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Result<(), Error> {
+    let start_time = Instant::now();
+
     let mut index = repo.index()?;
     index.add_path(path)?;
     index.write()?;
@@ -197,13 +199,21 @@ pub async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> 
         parents.iter().collect::<Vec<&Commit>>().as_slice(),
     )?;
 
+    let elapsed_millis = start_time.elapsed().as_millis();
+    REPO_COMMIT_TIME.observe(elapsed_millis as f64 / 1000.0);
+
     Ok(())
 }
 
 /// Push commits.
 pub fn push_updates(repo: &Repository) -> Result<(), Error> {
+    let start_time = Instant::now();
+
     repo.find_remote("origin")?
         .push(&["refs/heads/main:refs/heads/main"], None)?;
+
+    let elapsed_millis = start_time.elapsed().as_millis();
+    REPO_PUSH_TIME.observe(elapsed_millis as f64 / 1000.0);
 
     Ok(())
 }

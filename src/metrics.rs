@@ -42,6 +42,22 @@ lazy_static! {
         tracing::error!(error = e.to_string(), "query_processing_time");
         std::process::exit(1);
     });
+    pub static ref REPO_COMMIT_TIME: Histogram = Histogram::with_opts(HistogramOpts {
+        common_opts: Opts::new("repo_commit_time", "Repo Commit Times"),
+        buckets: vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "repo_commit_time");
+        std::process::exit(1);
+    });
+    pub static ref REPO_PUSH_TIME: Histogram = Histogram::with_opts(HistogramOpts {
+        common_opts: Opts::new("repo_push_time", "Repo Push Times"),
+        buckets: vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "repo_push_time");
+        std::process::exit(1);
+    });
     pub static ref REPO_FETCH_TIME: HistogramVec = HistogramVec::new(
         HistogramOpts {
             common_opts: Opts::new("repo_fetch_time", "Repo Fetch Times"),
@@ -121,6 +137,20 @@ pub fn register_metrics() {
         .register(Box::new(REPO_CHEKOUT_TIME.clone()))
         .unwrap_or_else(|e| {
             tracing::error!(error = e.to_string(), "repo_checkout_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(REPO_COMMIT_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "repo_commit_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(REPO_PUSH_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "repo_push_time collector error");
             std::process::exit(1);
         });
 
