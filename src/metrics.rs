@@ -60,7 +60,7 @@ lazy_static! {
     });
     pub static ref REPO_PUSH_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("repo_push_time", "Repo Push Times"),
-        buckets: vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
+        buckets: vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.5, 5.0],
     })
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "repo_push_time");
