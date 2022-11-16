@@ -42,6 +42,14 @@ lazy_static! {
         tracing::error!(error = e.to_string(), "query_processing_time");
         std::process::exit(1);
     });
+    pub static ref RDF_PRETTIFIER_TIME: Histogram = Histogram::with_opts(HistogramOpts {
+        common_opts: Opts::new("rdf_prettifier_time", "RDF Prettifier Times"),
+        buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string(), "rdf_prettifier_time");
+        std::process::exit(1);
+    });
     pub static ref REPO_COMMIT_TIME: Histogram = Histogram::with_opts(HistogramOpts {
         common_opts: Opts::new("repo_commit_time", "Repo Commit Times"),
         buckets: vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1],
@@ -113,6 +121,13 @@ pub fn register_metrics() {
         .register(Box::new(RESPONSE_TIME.clone()))
         .unwrap_or_else(|e| {
             tracing::error!(error = e.to_string(), "response_time collector error");
+            std::process::exit(1);
+        });
+
+    REGISTRY
+        .register(Box::new(RDF_PRETTIFIER_TIME.clone()))
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string(), "rdf_prettifier_time collector error");
             std::process::exit(1);
         });
 

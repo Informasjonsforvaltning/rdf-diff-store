@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, time::Instant};
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
@@ -6,7 +6,7 @@ use oxigraph::{io::GraphFormat, model::GraphNameRef};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::error::Error;
+use crate::{error::Error, metrics::RDF_PRETTIFIER_TIME};
 
 lazy_static! {
     static ref RDF_PRETTIFIER_URL: String = env::var("RDF_PRETTIFIER_URL").unwrap_or_else(|e| {
@@ -42,6 +42,8 @@ impl RdfPrettifier for APIPrettifier {
     }
 
     async fn prettify(&self, graph: &str) -> Result<String, Error> {
+        let start_time = Instant::now();
+
         let response = self
             .0
             .post(RDF_PRETTIFIER_URL.clone())
@@ -53,6 +55,9 @@ impl RdfPrettifier for APIPrettifier {
             }))
             .send()
             .await?;
+
+        let elapsed_millis = start_time.elapsed().as_millis();
+        RDF_PRETTIFIER_TIME.observe(elapsed_millis as f64 / 1000.0);
 
         match response.status() {
             StatusCode::OK => Ok(response.text().await?),
