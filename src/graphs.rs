@@ -61,7 +61,9 @@ pub async fn store_graph<P: RdfPrettifier>(
         format!("update: {}", graph.id),
     )
     .await?;
-    push_updates(&repo)?;
+
+    // Push ever x seconds instead
+    // push_updates(&repo)?;
 
     Ok(())
 }
@@ -76,7 +78,8 @@ pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
 
     remove_file(&path).await?;
     commit_file(&repo, &path, format!("delete: {}", id)).await?;
-    push_updates(&repo)?;
+    // Push ever x seconds instead
+    // push_updates(&repo)?;
 
     Ok(())
 }

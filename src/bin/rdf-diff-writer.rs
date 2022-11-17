@@ -1,22 +1,35 @@
 #[macro_use]
 extern crate serde;
 
-use std::{str::from_utf8, time::Instant};
+use std::{
+    str::from_utf8,
+    time::{Duration, Instant},
+};
 
+use actix_rt::time::interval;
 use actix_web::{
     delete, get, middleware::Logger, post, web, App, HttpRequest, HttpResponse, HttpServer,
     Responder,
 };
+use lazy_static::lazy_static;
 use rdf_diff_store::{
     api::validate_api_key,
     error::Error,
-    git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH},
+    git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     graphs::{delete_graph, store_graph},
     metrics::PROCESSED_REQUESTS,
     metrics::{get_metrics, register_metrics, RESPONSE_TIME},
     models,
     rdf::{APIPrettifier, RdfPrettifier},
 };
+
+lazy_static! {
+    // Only 1 (basically a lock) to avoid multiple writes and conflicts
+    static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
+        tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
+        std::process::exit(1)
+    })));
+}
 
 #[get("/livez")]
 async fn livez() -> Result<impl Responder, Error> {
@@ -134,16 +147,23 @@ async fn main() -> std::io::Result<()> {
 
     register_metrics();
 
-    // Only 1 (basically a lock) to avoid multiple writes and conflicts
-    let repo_pool = ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
-        std::process::exit(1)
-    });
-    let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
-
     let state = State {
         rdf_prettifier: APIPrettifier::new(),
     };
+
+    actix_rt::spawn(async {
+        let mut interval = interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+
+            let repo = ReusableRepoPool::pop(&REPO_POOL).await;
+            push_updates(&repo).unwrap_or_else(|e| {
+                tracing::error!(error = e.to_string().as_str(), "Unable to push updates");
+                std::process::exit(1)
+            });
+            ReusableRepoPool::push(&REPO_POOL, repo).await;
+        }
+    });
 
     HttpServer::new(move || {
         App::new()
@@ -154,7 +174,7 @@ async fn main() -> std::io::Result<()> {
                     .log_target("http"),
             )
             .app_data(web::Data::new(state.clone()))
-            .app_data(web::Data::clone(&repo_pool))
+            .app_data(web::Data::clone(&REPO_POOL))
             .service(livez)
             .service(readyz)
             .service(metrics_endpoint)

@@ -5,6 +5,7 @@ edition = "2021"
 default-run = "rdf-diff-writer"
 
 [dependencies]
+actix-rt = "2.7.0"
 actix-web = "4.1.0"
 async-lock = "2.5.0"
 async-std = "1.12.0"
