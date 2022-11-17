@@ -9,7 +9,7 @@ use tokio::{
 
 use crate::{
     error::Error,
-    git::{checkout_main_and_fetch_updates, checkout_timestamp, commit_file, push_updates},
+    git::{checkout_main_and_fetch_updates, checkout_timestamp, commit_file},
     metrics::FILE_READ_TIME,
     models,
     rdf::RdfPrettifier,

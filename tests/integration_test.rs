@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use actix_web::web;
 use rdf_diff_store::{
-    git::ReusableRepoPool,
+    git::{push_updates, ReusableRepoPool},
     graphs::{read_all_graph_files, store_graph},
     models::Graph,
     rdf::{NoOpPrettifier, RdfPrettifier},
@@ -39,6 +39,7 @@ async fn test() {
     store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
         .await
         .expect("unable to store graph");
+    push_updates(&push_repo).expect("unable to push");
 
     graph.id = "anotherone".to_string();
 
@@ -54,6 +55,7 @@ async fn test() {
     store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
         .await
         .expect("unable to store graph");
+    push_updates(&push_repo).expect("unable to push");
 
     let post_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
