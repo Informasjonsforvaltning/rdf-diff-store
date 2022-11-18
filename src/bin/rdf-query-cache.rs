@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
+use rdf_diff_store::api::{livez, readyz};
 use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
 use rdf_diff_store::metrics::CACHE_COUNT;
 
@@ -13,18 +14,9 @@ use rdf_diff_store::{
 };
 use serde::Deserialize;
 
-#[get("/livez")]
-async fn livez() -> Result<impl Responder, Error> {
-    Ok("ok")
-}
-
-#[get("/readyz")]
-async fn readyz() -> Result<impl Responder, Error> {
-    Ok("ok")
-}
-
 #[get("/metrics")]
 async fn metrics_endpoint(state: web::Data<State>) -> impl Responder {
+    // Update number of items in caches for each metric request.
     CACHE_COUNT
         .with_label_values(&["graphs"])
         .set(state.cache.graphs_cache.entry_count() as i64);
@@ -38,6 +30,7 @@ async fn metrics_endpoint(state: web::Data<State>) -> impl Responder {
     match get_metrics() {
         Ok(metrics) => metrics,
         Err(e) => {
+            // Log an error and return no metrics.
             tracing::error!(error = e.to_string(), "unable to gather metrics");
             "".to_string()
         }
@@ -57,7 +50,7 @@ async fn get_api_sparql(
     query: web::Query<SparqlQueryParams>,
     state: web::Data<State>,
 ) -> Result<impl Responder, Error> {
-    //validate_api_key(request)?;
+    // validate_api_key(request)?;
 
     let timestamp = path.into_inner();
     let query_params = query.into_inner();
@@ -152,7 +145,7 @@ async fn main() -> std::io::Result<()> {
     register_metrics();
 
     let repo_pool = ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 32).unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
+        tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
         std::process::exit(1)
     });
     let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
@@ -168,6 +161,7 @@ async fn main() -> std::io::Result<()> {
                 Logger::default()
                     .exclude("/livez".to_string())
                     .exclude("/readyz".to_string())
+                    .exclude("/metrics".to_string())
                     .log_target("http"),
             )
             .app_data(web::Data::new(state.clone()))

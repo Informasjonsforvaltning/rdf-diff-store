@@ -8,7 +8,7 @@ use crate::models;
 pub enum Error {
     #[error("{0}")]
     String(String),
-    #[error("Unauthorized: {0}")]
+    #[error("unauthorized: {0}")]
     Unauthorized(String),
     #[error(transparent)]
     Utf8Error(#[from] std::str::Utf8Error),

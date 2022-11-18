@@ -42,27 +42,39 @@ impl RdfPrettifier for APIPrettifier {
     }
 
     async fn prettify(&self, graph: &str) -> Result<String, Error> {
-        let start_time = Instant::now();
+        let retry_attempts = 5;
+        let response = {
+            let mut r = Err(Error::String(
+                "invalid number of prettification attempts".into(),
+            ));
+            for _ in 0..retry_attempts {
+                let start_time = Instant::now();
+                r = self
+                    .0
+                    .post(RDF_PRETTIFIER_URL.clone())
+                    .header("X-API-KEY", RDF_PRETTIFIER_API_KEY.clone())
+                    .json(&json!({
+                        "format": "text/turtle",
+                        "output_format": "text/turtle",
+                        "graph": graph,
+                    }))
+                    .send()
+                    .await
+                    .map_err(|e| Error::from(e));
 
-        let response = self
-            .0
-            .post(RDF_PRETTIFIER_URL.clone())
-            .header("X-API-KEY", RDF_PRETTIFIER_API_KEY.clone())
-            .json(&json!({
-                "format": "text/turtle",
-                "output_format": "text/turtle",
-                "graph": graph,
-            }))
-            .send()
-            .await?;
-
-        let elapsed_millis = start_time.elapsed().as_millis();
-        RDF_PRETTIFIER_TIME.observe(elapsed_millis as f64 / 1000.0);
+                if r.is_ok() {
+                    let elapsed_millis = start_time.elapsed().as_millis();
+                    RDF_PRETTIFIER_TIME.observe(elapsed_millis as f64 / 1000.0);
+                    break;
+                }
+            }
+            r
+        }?;
 
         match response.status() {
             StatusCode::OK => Ok(response.text().await?),
             _ => Err(format!(
-                "Invalid response from pretty print api: {} - {}",
+                "invalid response from pretty print api: {} - {}",
                 response.status(),
                 response.text().await?
             )
@@ -71,18 +83,6 @@ impl RdfPrettifier for APIPrettifier {
     }
 }
 
-pub struct NoOpPrettifier {}
-
-#[async_trait]
-impl RdfPrettifier for NoOpPrettifier {
-    fn new() -> Self {
-        NoOpPrettifier {}
-    }
-
-    async fn prettify(&self, graph: &str) -> Result<String, Error> {
-        Ok(graph.to_string())
-    }
-}
 
 pub fn to_turtle(store: &oxigraph::store::Store) -> Result<String, Error> {
     let mut buff = Vec::new();

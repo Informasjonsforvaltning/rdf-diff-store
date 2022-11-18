@@ -5,8 +5,11 @@ use rdf_diff_store::{
     git::{push_updates, ReusableRepoPool},
     graphs::{read_all_graph_files, store_graph},
     models::Graph,
-    rdf::{NoOpPrettifier, RdfPrettifier},
+    rdf::RdfPrettifier,
 };
+use utils::NoOpPrettifier;
+
+mod utils;
 
 /// Store one graph, then store another, then check that graphs retured for the
 /// three timestamps are correct. The three timestamps beeing: before first

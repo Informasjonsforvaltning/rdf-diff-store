@@ -38,7 +38,7 @@ impl ReusableRepoPool {
         let path = format!("{}/0", root_path);
         Repository::clone(&GIT_REPO_URL.clone(), &path)?;
 
-        // Create n copies of the same repo, no need to clone n more times.
+        // Create n copies of the same repo, no need to clone n-1 more times.
         for i in 1..size {
             copy_dir_recursive(&path, format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i))?;
         }

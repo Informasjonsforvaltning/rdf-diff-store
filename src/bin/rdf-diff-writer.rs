@@ -13,7 +13,7 @@ use actix_web::{
 };
 use lazy_static::lazy_static;
 use rdf_diff_store::{
-    api::validate_api_key,
+    api::{livez, readyz, validate_api_key},
     error::Error,
     git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     graphs::{delete_graph, store_graph},
@@ -24,21 +24,11 @@ use rdf_diff_store::{
 };
 
 lazy_static! {
-    // Only 1 (basically a lock) to avoid multiple writes and conflicts
+    // Only 1 repo (basically a lock) to avoid conflicting pushes to git storage.
     static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "Unable to create repo pool");
+        tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
         std::process::exit(1)
     })));
-}
-
-#[get("/livez")]
-async fn livez() -> Result<impl Responder, Error> {
-    Ok("ok")
-}
-
-#[get("/readyz")]
-async fn readyz() -> Result<impl Responder, Error> {
-    Ok("ok")
 }
 
 #[get("/metrics")]
@@ -46,6 +36,7 @@ async fn metrics_endpoint() -> impl Responder {
     match get_metrics() {
         Ok(metrics) => metrics,
         Err(e) => {
+            // Log an error and return no metrics.
             tracing::error!(error = e.to_string(), "unable to gather metrics");
             "".to_string()
         }
@@ -147,23 +138,26 @@ async fn main() -> std::io::Result<()> {
 
     register_metrics();
 
-    let state = State {
-        rdf_prettifier: APIPrettifier::new(),
-    };
-
     actix_rt::spawn(async {
+        // Push repo updates periodically, not related to when commits are made.
+        // The time it takes to push does not scale linearly with amout of data.
+
         let mut interval = interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
 
             let repo = ReusableRepoPool::pop(&REPO_POOL).await;
-            push_updates(&repo).unwrap_or_else(|e| {
-                tracing::error!(error = e.to_string().as_str(), "Unable to push updates");
+            if let Err(e) = push_updates(&repo) {
+                tracing::error!(error = e.to_string(), "unable to push updates");
                 std::process::exit(1)
-            });
+            }
             ReusableRepoPool::push(&REPO_POOL, repo).await;
         }
     });
+
+    let state = State {
+        rdf_prettifier: APIPrettifier::new(),
+    };
 
     HttpServer::new(move || {
         App::new()
