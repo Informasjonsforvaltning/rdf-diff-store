@@ -62,12 +62,7 @@ services:
         sleep 1000000;
       "
     healthcheck:
-      test:
-        [
-          "CMD",
-          "curl",
-          "http://gitea:3000/gitea/diff-store"
-        ]
+      test: [ "CMD", "curl", "http://gitea:3000/gitea/diff-store" ]
       interval: 1s
       retries: 10000
     networks:

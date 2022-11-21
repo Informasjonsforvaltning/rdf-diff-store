@@ -21,7 +21,7 @@ spec:
       containers:
         - env:
             - name: GIT_REPOS_ROOT_PATH
-              value: /repos
+              value: /repo
             - name: GIT_REPO_URL
               valueFrom:
                 secretKeyRef:
@@ -42,6 +42,9 @@ spec:
           name: fdk-dataset-rdf-diff-writer
           image: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer:staging_latest
           imagePullPolicy: Always
+          volumeMounts:
+            - name: repo
+              mountPath: /repo
           ports:
             - containerPort: 8080
           livenessProbe:
@@ -52,3 +55,7 @@ spec:
             httpGet:
               path: /readyz
               port: 8080
+      volumes:
+        - name: repo
+          persistentVolumeClaim:
+            claimName: fdk-dataset-rdf-diff-writer

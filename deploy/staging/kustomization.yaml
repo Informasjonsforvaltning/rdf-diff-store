@@ -5,5 +5,6 @@ resources:
   - deployment-rdf-diff-writer.yaml
   - deployment-rdf-query-cache.yaml
   - ingress.yaml
+  - pvc-rdf-diff-writer.yaml
   - service-rdf-diff-writer.yaml
   - service-rdf-query-cache.yaml
