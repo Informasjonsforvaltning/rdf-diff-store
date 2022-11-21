@@ -11,6 +11,8 @@ spec:
   selector:
     matchLabels:
       app: fdk-dataset-rdf-diff-writer
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
