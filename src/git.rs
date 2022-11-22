@@ -42,7 +42,10 @@ impl ReusableRepoPool {
 
         // Create n copies of the same repo, no need to clone n-1 more times.
         for i in 1..size {
-            copy_dir_recursive(&path, format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i))?;
+            let destination = format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i);
+            if !Path::exists(destination.as_ref()) {
+                copy_dir_recursive(&path, destination)?;
+            }
         }
 
         let repos = (0..size)
