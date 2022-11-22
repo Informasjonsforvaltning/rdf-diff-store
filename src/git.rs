@@ -37,8 +37,7 @@ impl ReusableRepoPool {
     pub fn new(root_path: String, size: u64) -> Result<Self, Error> {
         let path = format!("{}/0", root_path);
         // Repo might already exist (persistent volume)
-        Repository::open(GIT_REPO_URL.clone())
-            .or_else(|_| Repository::clone(&GIT_REPO_URL, &path))?;
+        Repository::open(&path).or_else(|_| Repository::clone(&GIT_REPO_URL, &path))?;
 
         // Create n copies of the same repo, no need to clone n-1 more times.
         for i in 1..size {
