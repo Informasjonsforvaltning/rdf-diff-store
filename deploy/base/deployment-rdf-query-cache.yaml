@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fdk-dataset-rdf-query-cache
-  namespace: staging
   labels:
     app: fdk-dataset-rdf-query-cache
 spec:

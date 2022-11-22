@@ -2,11 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: fdk-dataset-rdf-diff-writer
-  namespace: staging
+  name: fdk-dataset-rdf-query-cache
 spec:
   selector:
-    app: fdk-dataset-rdf-diff-writer
+    app: fdk-dataset-rdf-query-cache
   ports:
     - name: http
       protocol: TCP
