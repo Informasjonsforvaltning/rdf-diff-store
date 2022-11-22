@@ -1,16 +1,12 @@
-use std::time::Instant;
-
-use actix_web::{
-    dev::Service, get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder,
-};
+use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use rdf_diff_store::api::{livez, readyz};
 use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
-use rdf_diff_store::metrics::CACHE_COUNT;
+use rdf_diff_store::metrics::{middleware::HttpMetrics, CACHE_COUNT};
 
 use rdf_diff_store::rdf::{APIPrettifier, RdfPrettifier};
 use rdf_diff_store::{
     error::Error,
-    metrics::{get_metrics, register_metrics, HTTP_REQUEST_DURATION_SECONDS},
+    metrics::{get_metrics, register_metrics},
     query::QueryCache,
     query::{graphs_with_cache, query_with_cache},
 };
@@ -58,7 +54,6 @@ async fn get_api_sparql(
     let query_params = query.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
-    let start_time = Instant::now();
     let result = query_with_cache(
         &state.rdf_prettifier,
         &repo,
@@ -133,27 +128,7 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
-            .wrap_fn(|request, service| {
-                let method = request.method().to_string();
-                let path = request.uri().path().to_string();
-
-                let future = service.call(request);
-
-                async move {
-                    let start_time = Instant::now();
-                    let response = future.await?;
-                    let elapsed_time = start_time.elapsed().as_secs_f64();
-
-                    HTTP_REQUEST_DURATION_SECONDS
-                        .with_label_values(&[
-                            &method,
-                            &path,
-                            &response.status().as_u16().to_string(),
-                        ])
-                        .observe(elapsed_time);
-                    Ok(response)
-                }
-            })
+            .wrap(HttpMetrics)
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&repo_pool))
             .service(livez)

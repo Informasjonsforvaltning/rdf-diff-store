@@ -1,15 +1,12 @@
 #[macro_use]
 extern crate serde;
 
-use std::{
-    str::from_utf8,
-    time::{Duration, Instant},
-};
+use std::{str::from_utf8, time::Duration};
 
 use actix_rt::time::interval;
 use actix_web::{
-    delete, dev::Service, get, middleware::Logger, post, web, App, HttpRequest, HttpResponse,
-    HttpServer, Responder,
+    delete, get, middleware::Logger, post, web, App, HttpRequest, HttpResponse, HttpServer,
+    Responder,
 };
 use lazy_static::lazy_static;
 use rdf_diff_store::{
@@ -17,12 +14,10 @@ use rdf_diff_store::{
     error::Error,
     git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     graphs::{delete_graph, store_graph},
-    metrics::{get_metrics, register_metrics, HTTP_REQUEST_DURATION_SECONDS},
+    metrics::{get_metrics, middleware::HttpMetrics, register_metrics},
     models,
     rdf::{APIPrettifier, RdfPrettifier},
 };
-use reqwest::StatusCode;
-
 lazy_static! {
     // Only 1 repo (basically a lock) to avoid conflicting pushes to git storage.
     static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
@@ -136,29 +131,7 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
-            .wrap_fn(|request, service| {
-                let method = request.method().to_string();
-                let path = request.uri().path().to_string();
-
-                let future = service.call(request);
-
-                async move {
-                    let start_time = Instant::now();
-                    let response = future.await?;
-                    let elapsed_time = start_time.elapsed().as_secs_f64();
-
-                    if path.starts_with("/api") && response.status() != StatusCode::NOT_FOUND {
-                        HTTP_REQUEST_DURATION_SECONDS
-                            .with_label_values(&[
-                                &method,
-                                &path,
-                                &response.status().as_u16().to_string(),
-                            ])
-                            .observe(elapsed_time);
-                    }
-                    Ok(response)
-                }
-            })
+            .wrap(HttpMetrics)
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&REPO_POOL))
             .service(livez)
