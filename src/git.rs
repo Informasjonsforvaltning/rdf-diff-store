@@ -50,11 +50,8 @@ impl ReusableRepoPool {
 
         let repos = (0..size)
             .map(|i| {
-                Ok(Repository::open(&format!(
-                    "{}/{}",
-                    GIT_REPOS_ROOT_PATH.clone(),
-                    i
-                ))?)
+                let path = format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i);
+                Ok(Repository::open(&path)?)
             })
             .collect::<Result<_, git2::Error>>()?;
 
