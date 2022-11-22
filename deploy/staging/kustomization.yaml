@@ -8,3 +8,10 @@ resources:
   - pvc-rdf-diff-writer.yaml
   - service-rdf-diff-writer.yaml
   - service-rdf-query-cache.yaml
+images:
+  - name: rdf-diff-writer
+    newName: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer
+    newTag: $(GIT_COMMIT_SHORT_SHA)
+  - name: rdf-query-cache
+    newName: eu.gcr.io/digdir-fdk-infra/rdf-query-cache
+    newTag: $(GIT_COMMIT_SHORT_SHA)

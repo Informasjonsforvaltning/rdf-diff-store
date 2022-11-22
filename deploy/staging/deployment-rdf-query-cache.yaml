@@ -40,7 +40,7 @@ spec:
                   name: fdk-dataset-rdf-diff-store
                   key: API_KEY
           name: fdk-dataset-query-cache
-          image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
+          image: rdf-query-cache
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

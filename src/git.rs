@@ -106,20 +106,18 @@ pub fn checkout_main_and_fetch_updates(repo: &Repository) -> Result<bool, Error>
             repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
             Ok(true)
         } else {
-            Err("Not able to fast-forward repo.".into())
+            Err(Error::from("Not able to fast-forward repo."))
         }
     } else {
         Ok(false)
-    };
+    }?;
 
     let elapsed_millis = start_time.elapsed().as_millis();
-    if let Ok(change) = updated {
-        REPO_FETCH_TIME
-            .with_label_values(&[&format!("{}", change)])
-            .observe(elapsed_millis as f64 / 1000.0);
-    }
+    REPO_FETCH_TIME
+        .with_label_values(&[&format!("{}", updated)])
+        .observe(elapsed_millis as f64 / 1000.0);
 
-    updated
+    Ok(updated)
 }
 
 /// Checkout a timestamp. Returns false if no files exists at that point in time.

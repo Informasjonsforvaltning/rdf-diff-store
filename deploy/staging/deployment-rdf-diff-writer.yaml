@@ -42,7 +42,7 @@ spec:
                   name: fdk-dataset-rdf-diff-store
                   key: API_KEY
           name: fdk-dataset-rdf-diff-writer
-          image: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer:staging_latest
+          image: rdf-diff-writer
           imagePullPolicy: Always
           volumeMounts:
             - name: repo
