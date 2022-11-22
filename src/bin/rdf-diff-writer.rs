@@ -8,8 +8,8 @@ use std::{
 
 use actix_rt::time::interval;
 use actix_web::{
-    delete, get, middleware::Logger, post, web, App, HttpRequest, HttpResponse, HttpServer,
-    Responder,
+    delete, dev::Service, get, middleware::Logger, post, web, App, HttpRequest, HttpResponse,
+    HttpServer, Responder,
 };
 use lazy_static::lazy_static;
 use rdf_diff_store::{
@@ -17,11 +17,11 @@ use rdf_diff_store::{
     error::Error,
     git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     graphs::{delete_graph, store_graph},
-    metrics::PROCESSED_REQUESTS,
-    metrics::{get_metrics, register_metrics, RESPONSE_TIME},
+    metrics::{get_metrics, register_metrics, HTTP_REQUEST_DURATION_SECONDS},
     models,
     rdf::{APIPrettifier, RdfPrettifier},
 };
+use reqwest::StatusCode;
 
 lazy_static! {
     // Only 1 repo (basically a lock) to avoid conflicting pushes to git storage.
@@ -29,6 +29,7 @@ lazy_static! {
         tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
         std::process::exit(1)
     })));
+
 }
 
 #[get("/metrics")]
@@ -52,33 +53,16 @@ async fn post_api_graphs(
 ) -> Result<impl Responder, Error> {
     validate_api_key(request)?;
 
-    let start_time = Instant::now();
-
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
     let result = store_graph(&repo, &state.rdf_prettifier, &graph).await;
     ReusableRepoPool::push(&repos, repo).await;
 
-    let elapsed_millis = start_time.elapsed().as_millis();
+    // Dont check result before pushing repo back into pool.
+    result?;
 
-    match result {
-        Ok(_) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["POST", "/api/graphs", "success"])
-                .inc();
-            RESPONSE_TIME
-                .with_label_values(&["POST", "/api/graphs", "0"])
-                .observe(elapsed_millis as f64 / 1000.0);
-            Ok(HttpResponse::Ok().message_body(""))
-        }
-        Err(e) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["POST", "/api/graphs", "error"])
-                .inc();
-            Err(e)
-        }
-    }
+    Ok(HttpResponse::Ok().message_body(""))
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,32 +78,16 @@ async fn delete_api_graphs(
 ) -> Result<impl Responder, Error> {
     validate_api_key(request)?;
 
-    let start_time = Instant::now();
     let query_params = query.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
     let result = delete_graph(&repo, query_params.id).await;
     ReusableRepoPool::push(&repos, repo).await;
 
-    let elapsed_millis = start_time.elapsed().as_millis();
+    // Dont check result before pushing repo back into pool.
+    result?;
 
-    match result {
-        Ok(_) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["DELETE", "/api/graphs", "success"])
-                .inc();
-            RESPONSE_TIME
-                .with_label_values(&["DELETE", "/api/graphs", "0"])
-                .observe(elapsed_millis as f64 / 1000.0);
-            Ok(HttpResponse::Ok().message_body(""))
-        }
-        Err(e) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["DELETE", "/api/graphs", "error"])
-                .inc();
-            Err(e)
-        }
-    }
+    Ok(HttpResponse::Ok().message_body(""))
 }
 
 #[derive(Clone)]
@@ -168,6 +136,29 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
+            .wrap_fn(|request, service| {
+                let method = request.method().to_string();
+                let path = request.uri().path().to_string();
+
+                let future = service.call(request);
+
+                async move {
+                    let start_time = Instant::now();
+                    let response = future.await?;
+                    let elapsed_time = start_time.elapsed().as_secs_f64();
+
+                    if path.starts_with("/api") && response.status() != StatusCode::NOT_FOUND {
+                        HTTP_REQUEST_DURATION_SECONDS
+                            .with_label_values(&[
+                                &method,
+                                &path,
+                                &response.status().as_u16().to_string(),
+                            ])
+                            .observe(elapsed_time);
+                    }
+                    Ok(response)
+                }
+            })
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&REPO_POOL))
             .service(livez)

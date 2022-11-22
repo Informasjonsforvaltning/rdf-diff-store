@@ -1,6 +1,8 @@
 use std::time::Instant;
 
-use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{
+    dev::Service, get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder,
+};
 use rdf_diff_store::api::{livez, readyz};
 use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
 use rdf_diff_store::metrics::CACHE_COUNT;
@@ -8,7 +10,7 @@ use rdf_diff_store::metrics::CACHE_COUNT;
 use rdf_diff_store::rdf::{APIPrettifier, RdfPrettifier};
 use rdf_diff_store::{
     error::Error,
-    metrics::{get_metrics, register_metrics, PROCESSED_REQUESTS, RESPONSE_TIME},
+    metrics::{get_metrics, register_metrics, HTTP_REQUEST_DURATION_SECONDS},
     query::QueryCache,
     query::{graphs_with_cache, query_with_cache},
 };
@@ -65,28 +67,12 @@ async fn get_api_sparql(
         query_params.query,
     )
     .await;
-    let elapsed_millis = start_time.elapsed().as_millis();
     ReusableRepoPool::push(&repos, repo).await;
 
-    match result {
-        Ok(ok) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["GET", "/api/sparql", "success"])
-                .inc();
-            RESPONSE_TIME
-                .with_label_values(&["GET", "/api/sparql", &format!("{}", ok.1)])
-                .observe(elapsed_millis as f64 / 1000.0);
-            Ok(HttpResponse::Ok()
-                .content_type(mime::APPLICATION_JSON)
-                .message_body(ok.0))
-        }
-        Err(e) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["GET", "/api/sparql", "error"])
-                .inc();
-            Err(e)
-        }
-    }
+    // Dont check result before pushing repo back into pool.
+    result?;
+
+    Ok(HttpResponse::Ok().message_body(""))
 }
 
 #[get("/api/graphs/{timestamp}")]
@@ -101,30 +87,13 @@ async fn get_api_graphs(
     let timestamp = path.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
-    let start_time = Instant::now();
     let result = graphs_with_cache(&state.rdf_prettifier, &repo, &state.cache, timestamp).await;
-    let elapsed_millis = start_time.elapsed().as_millis();
     ReusableRepoPool::push(&repos, repo).await;
 
-    match result {
-        Ok(ok) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["GET", "/api/graphs", "success"])
-                .inc();
-            RESPONSE_TIME
-                .with_label_values(&["GET", "/api/graphs", &format!("{}", ok.1)])
-                .observe(elapsed_millis as f64 / 1000.0);
-            Ok(HttpResponse::Ok()
-                .content_type("text/turtle")
-                .message_body(ok.0))
-        }
-        Err(e) => {
-            PROCESSED_REQUESTS
-                .with_label_values(&["GET", "/api/graphs", "error"])
-                .inc();
-            Err(e)
-        }
-    }
+    // Dont check result before pushing repo back into pool.
+    result?;
+
+    Ok(HttpResponse::Ok().message_body(""))
 }
 
 #[derive(Clone)]
@@ -164,6 +133,27 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
+            .wrap_fn(|request, service| {
+                let method = request.method().to_string();
+                let path = request.uri().path().to_string();
+
+                let future = service.call(request);
+
+                async move {
+                    let start_time = Instant::now();
+                    let response = future.await?;
+                    let elapsed_time = start_time.elapsed().as_secs_f64();
+
+                    HTTP_REQUEST_DURATION_SECONDS
+                        .with_label_values(&[
+                            &method,
+                            &path,
+                            &response.status().as_u16().to_string(),
+                        ])
+                        .observe(elapsed_time);
+                    Ok(response)
+                }
+            })
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&repo_pool))
             .service(livez)

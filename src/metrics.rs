@@ -1,7 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{
-    Encoder, Histogram, HistogramOpts, HistogramVec, IntCounterVec, IntGaugeVec, Opts, Registry,
-};
+use prometheus::{Encoder, Histogram, HistogramOpts, HistogramVec, IntGaugeVec, Opts, Registry};
 
 use crate::error::Error;
 
@@ -15,23 +13,15 @@ lazy_static! {
         tracing::error!(error = e.to_string(), "cache_count metric error");
         std::process::exit(1);
     });
-    pub static ref PROCESSED_REQUESTS: IntCounterVec = IntCounterVec::new(
-        Opts::new("processed_requests", "Processed Query Requests"),
+    pub static ref HTTP_REQUEST_DURATION_SECONDS: HistogramVec = HistogramVec::new(
+        HistogramOpts {
+            common_opts: Opts::new("http_requests_duration_seconds", "Response Times"),
+            buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
+        },
         &["method", "endpoint", "status"]
     )
     .unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string(), "processed_requests metric error");
-        std::process::exit(1);
-    });
-    pub static ref RESPONSE_TIME: HistogramVec = HistogramVec::new(
-        HistogramOpts {
-            common_opts: Opts::new("response_time", "Response Times"),
-            buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
-        },
-        &["method", "endpoint", "cache_lvl"]
-    )
-    .unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string(), "response_time");
+        tracing::error!(error = e.to_string(), "http_requests_duration_seconds");
         std::process::exit(1);
     });
     pub static ref QUERY_PROCESSING_TIME: Histogram = Histogram::with_opts(HistogramOpts {
@@ -108,17 +98,7 @@ lazy_static! {
 
 pub fn register_metrics() {
     REGISTRY
-        .register(Box::new(PROCESSED_REQUESTS.clone()))
-        .unwrap_or_else(|e| {
-            tracing::error!(
-                error = e.to_string(),
-                "processed_query_requests collector error"
-            );
-            std::process::exit(1);
-        });
-
-    REGISTRY
-        .register(Box::new(RESPONSE_TIME.clone()))
+        .register(Box::new(HTTP_REQUEST_DURATION_SECONDS.clone()))
         .unwrap_or_else(|e| {
             tracing::error!(error = e.to_string(), "response_time collector error");
             std::process::exit(1);
