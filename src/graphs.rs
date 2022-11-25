@@ -4,7 +4,7 @@ use git2::Repository;
 use lazy_static::lazy_static;
 use tokio::{
     fs::{remove_file, File},
-    io::AsyncWriteExt,
+    io::{AsyncReadExt, AsyncWriteExt},
 };
 
 use crate::{
@@ -49,6 +49,17 @@ pub async fn store_graph<P: RdfPrettifier>(
         .parent()
         .ok_or::<Error>("invalid repo path".into())?
         .join(Path::new(&filename));
+
+    let abort_due_to_no_change = if let Ok(mut file) = File::open(&path).await {
+        let mut contents = vec![];
+        file.read_to_end(&mut contents).await?;
+        String::from_utf8(contents)? == graph_content
+    } else {
+        false
+    };
+    if abort_due_to_no_change {
+        return Ok(());
+    }
 
     let mut file = File::create(&path).await?;
     let mut buffer = Cursor::new(graph_content);

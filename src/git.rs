@@ -41,7 +41,7 @@ impl ReusableRepoPool {
 
         // Create n copies of the same repo, no need to clone n-1 more times.
         for i in 1..size {
-            let destination = format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i);
+            let destination = format!("{}/{}", root_path, i);
             if !Path::exists(destination.as_ref()) {
                 copy_dir_recursive(&path, destination)?;
             }
@@ -49,7 +49,7 @@ impl ReusableRepoPool {
 
         let repos = (0..size)
             .map(|i| {
-                let path = format!("{}/{}", GIT_REPOS_ROOT_PATH.clone(), i);
+                let path = format!("{}/{}", root_path, i);
                 Ok(Repository::open(&path)?)
             })
             .collect::<Result<_, git2::Error>>()?;
