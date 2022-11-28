@@ -3,6 +3,8 @@ use prometheus::{Encoder, Histogram, HistogramOpts, HistogramVec, IntGaugeVec, O
 
 use crate::error::Error;
 
+pub mod middleware;
+
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
     pub static ref CACHE_COUNT: IntGaugeVec = IntGaugeVec::new(

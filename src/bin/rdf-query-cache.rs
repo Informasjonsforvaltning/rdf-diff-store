@@ -1,7 +1,7 @@
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use rdf_diff_store::api::{livez, readyz};
 use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
-use rdf_diff_store::metrics::CACHE_COUNT;
+use rdf_diff_store::metrics::{middleware::HttpMetrics, CACHE_COUNT};
 
 use rdf_diff_store::rdf::{APIPrettifier, RdfPrettifier};
 use rdf_diff_store::{
@@ -128,6 +128,7 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
+            .wrap(HttpMetrics)
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&repo_pool))
             .service(livez)
