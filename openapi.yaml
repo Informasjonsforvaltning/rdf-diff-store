@@ -18,14 +18,32 @@ components:
           type: string
         error:
           type: string
+    Graph:
+      type: object
+      properties:
+        id:
+          type: string
+        format:
+          type: string
+        graph:
+          type: string
+      required:
+        - id
+        - graph
 
 paths:
-  /api/sparql:
+  /api/graphs/{timestamp}:
     get:
-      summary: Query current graphs with SparQL.
+      summary: Get graph at given timestamp.
       security:
         - apiKey: []
       parameters:
+        - in: path
+          name: timestamp
+          required: true
+          schema:
+            title: Timestamp
+            type: integer
         - in: query
           name: id
           required: false
@@ -36,9 +54,58 @@ paths:
         "200":
           description: Ok
           content:
+            text/turtle:
+              schema:
+                type: string
+          headers: {}
+        "500":
+          description: Error
+          content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/Error"
+          headers: {}
+  /api/graphs:
+    post:
+      summary: Store graph.
+      security:
+        - apiKey: []
+      requestBody:
+        description: Graph
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Graph"
+      responses:
+        "200":
+          description: Ok
+          content:
+            text/turtle:
+              schema:
+                type: string
+          headers: {}
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+          headers: {}
+    delete:
+      summary: Delete graph.
+      security:
+        - apiKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            title: Id
+            type: string
+      responses:
+        "200":
+          description: Ok
           headers: {}
         "500":
           description: Error
