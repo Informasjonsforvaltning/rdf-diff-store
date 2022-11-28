@@ -1,0 +1,17 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment-rdf-diff-writer.yaml
+  - deployment-rdf-query-cache.yaml
+  - ingress.yaml
+  - pvc-rdf-diff-writer.yaml
+  - service-rdf-diff-writer.yaml
+  - service-rdf-query-cache.yaml
+images:
+  - name: rdf-diff-writer
+    newName: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer
+    newTag: $(GIT_COMMIT_SHA)
+  - name: rdf-query-cache
+    newName: eu.gcr.io/digdir-fdk-infra/rdf-query-cache
+    newTag: $(GIT_COMMIT_SHA)
