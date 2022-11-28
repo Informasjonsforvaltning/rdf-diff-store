@@ -8,7 +8,7 @@ use crate::models;
 pub enum Error {
     #[error("{0}")]
     String(String),
-    #[error("Unauthorized: {0}")]
+    #[error("unauthorized: {0}")]
     Unauthorized(String),
     #[error(transparent)]
     Utf8Error(#[from] std::str::Utf8Error),
@@ -51,9 +51,9 @@ impl ResponseError for Error {
         use Error::*;
 
         match self {
-            // SomeSpecificError(e) => {
-            //     tracing::error!(error = e.to_string().as_str(), "Something went wrong :O")
-            // }
+            GitError(e) => {
+                tracing::error!(error = e.to_string().as_str(), "git error occured")
+            }
             e => {
                 tracing::warn!(
                     error = e.to_string().as_str(),

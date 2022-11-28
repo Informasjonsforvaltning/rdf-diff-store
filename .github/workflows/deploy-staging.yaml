@@ -14,13 +14,30 @@ jobs:
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build:
-    name: Build with reusable workflow when pull request is created
+  build-rdf-diff-writer:
+    name: Build diff-writer when pull request is created
+    if: github.event.pull_request.draft == false
+    uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
+    with:
+      app_name: rdf-diff-writer
+      environment: staging
+      build_env: true
+      build_env_name: BINARY
+      build_env_value: rdf-diff-writer
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
+
+  build-rdf-query-cache:
+    name: Build query-cache when pull request is created
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: rdf-query-cache
       environment: staging
+      build_env: true
+      build_env_name: BINARY
+      build_env_value: rdf-query-cache
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
@@ -28,8 +45,8 @@ jobs:
   deploy:
     name: Deploy to staging environment with reusable workflow
     if: github.event.pull_request.draft == false
-    needs: [test, build]
-    uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
+    needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
+    uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@kustomize/at/short-sha
     with:
       app_name: rdf-query-cache
       image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
