@@ -14,17 +14,17 @@ use rdf_diff_store::{
     error::Error,
     git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
     graphs::{delete_graph, store_graph},
-    metrics::{get_metrics, register_metrics},
+    metrics::{get_metrics, middleware::HttpMetrics, register_metrics},
     models,
     rdf::{APIPrettifier, RdfPrettifier},
 };
+
 lazy_static! {
     // Only 1 repo (basically a lock) to avoid conflicting pushes to git storage.
     static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
         std::process::exit(1)
     })));
-
 }
 
 #[get("/metrics")]
@@ -131,6 +131,7 @@ async fn main() -> std::io::Result<()> {
                     .exclude("/metrics".to_string())
                     .log_target("http"),
             )
+            .wrap(HttpMetrics)
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::clone(&REPO_POOL))
             .service(livez)
