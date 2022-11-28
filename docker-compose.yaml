@@ -1,0 +1,79 @@
+# https://docs.gitea.io/en-us/install-with-docker/
+
+version: "3"
+
+networks:
+  gitea:
+    external: false
+
+services:
+  db:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=gitea
+      - POSTGRES_PASSWORD=gitea
+      - POSTGRES_DB=gitea
+    networks:
+      - gitea
+
+  gitea:
+    image: gitea/gitea:1.17.3
+    container_name: gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=db:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea
+    restart: always
+    networks:
+      - gitea
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3000:3000"
+      - "222:22"
+    depends_on:
+      - db
+    healthcheck:
+      test: [ "CMD", "curl", "localhost:3000" ]
+      interval: 1s
+      retries: 10000
+
+  # Container that initializes gitea and creates a diff-store repo.
+  init-gitea-repo:
+    image: dwdraju/alpine-curl-jq
+    command: >-
+      bash -c "
+        # Initialize gitea
+        curl -X POST -sSf gitea:3000 -d 'db_type=postgres&db_host=db%3A5432&db_user=gitea&db_passwd=gitea&db_name=gitea&ssl_mode=disable&db_schema=&charset=utf8&db_path=%2Fdata%2Fgitea%2Fgitea.db&app_name=Gitea%3A+Git+with+a+cup+of+tea&repo_root_path=%2Fdata%2Fgit%2Frepositories&lfs_root_path=%2Fdata%2Fgit%2Flfs&run_user=git&domain=localhost&ssh_port=22&http_port=3000&app_url=http%3A%2F%2Flocalhost%3A3000%2F&log_root_path=%2Fdata%2Fgitea%2Flog&smtp_host=&smtp_from=&smtp_user=&smtp_passwd=&enable_federated_avatar=on&enable_open_id_sign_in=on&enable_open_id_sign_up=on&default_allow_create_organization=on&default_enable_timetracking=on&no_reply_address=noreply.localhost&password_algorithm=pbkdf2&admin_name=gitea&admin_passwd=gitea123&admin_confirm_passwd=gitea123&admin_email=admin%40noreply.com';
+        
+        # Wait for gitea to be initialized
+        while ! curl -sSf gitea:3000 > /dev/null; do sleep 1; done;
+        
+        # Create repo
+        curl -X POST -H 'Content-Type: application/json' -sSf gitea:gitea123@gitea:3000/api/v1/user/repos --data '{\"name\": \"diff-store\", \"default_branch\": \"main\", \"auto_init\": false}';
+        
+        # Make sure container does not terminate
+        sleep 1000000;
+      "
+    healthcheck:
+      test: [ "CMD", "curl", "http://gitea:3000/gitea/diff-store" ]
+      interval: 1s
+      retries: 10000
+    networks:
+      - gitea
+    depends_on:
+      gitea:
+        condition: service_healthy
+
+  # Dummy container who's entire purpose is to wait for diff-store repo to exist in gitea.
+  wait-for-gitea-repo-to-exist:
+    image: dwdraju/alpine-curl-jq
+    depends_on:
+      init-gitea-repo:
+        condition: service_healthy
