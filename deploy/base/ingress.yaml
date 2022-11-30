@@ -11,7 +11,7 @@ spec:
         paths:
           - backend:
               service:
-                name: fdk-dataset-query-cache
+                name: fdk-dataset-rdf-query-cache
                 port:
                   number: 8080
             path: /

@@ -51,7 +51,7 @@ jobs:
     name: Deploy to staging environment with reusable workflow
     if: github.event.pull_request.draft == false
     needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
-    uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@kustomize/at/short-sha
+    uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
       app_name: rdf-query-cache
       image: eu.gcr.io/digdir-fdk-infra/rdf-query-cache:staging_latest
