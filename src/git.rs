@@ -5,12 +5,13 @@ use std::{
 };
 
 use actix_web::web;
-use git2::{Commit, Repository, Signature};
+use git2::{Commit, Oid, Repository, Signature, Time};
 use lazy_static::lazy_static;
 
 use crate::{
     error::Error,
     metrics::{REPO_CHEKOUT_TIME, REPO_COMMIT_TIME, REPO_FETCH_TIME, REPO_PUSH_TIME},
+    models::metadata::Metadata,
 };
 
 lazy_static! {
@@ -73,6 +74,17 @@ impl ReusableRepoPool {
     }
 }
 
+/// Metadata.
+pub async fn repo_metadata(repo: &Repository) -> Result<Metadata, Error> {
+    checkout_main_and_fetch_updates(&repo)?;
+    let commit_time = list_commit_times(repo)?;
+
+    Ok(Metadata {
+        start_time: commit_time.first().map(|(time, _)| time.seconds()),
+        end_time: commit_time.last().map(|(time, _)| time.seconds()),
+    })
+}
+
 /// Checkout main branch and fetch updates.
 pub fn checkout_main_and_fetch_updates(repo: &Repository) -> Result<bool, Error> {
     let start_time = Instant::now();
@@ -120,10 +132,7 @@ pub fn checkout_main_and_fetch_updates(repo: &Repository) -> Result<bool, Error>
     Ok(updated)
 }
 
-/// Checkout a timestamp. Returns false if no files exists at that point in time.
-pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> {
-    let start_time = Instant::now();
-
+fn list_commit_times(repo: &Repository) -> Result<Vec<(Time, Oid)>, Error> {
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::REVERSE)?;
     revwalk.push_head()?;
@@ -135,6 +144,15 @@ pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Err
         let commit = repo.find_commit(oid)?;
         commit_times.push((commit.time(), oid));
     }
+
+    Ok(commit_times)
+}
+
+/// Checkout a timestamp. Returns false if no files exists at that point in time.
+pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> {
+    let start_time = Instant::now();
+
+    let commit_times = list_commit_times(repo)?;
 
     let ts = timestamp as i64;
     let result = match commit_times.binary_search_by(|(time, _)| time.seconds().cmp(&ts)) {

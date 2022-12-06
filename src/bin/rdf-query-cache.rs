@@ -1,6 +1,6 @@
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use rdf_diff_store::api::{livez, readyz};
-use rdf_diff_store::git::{ReusableRepoPool, GIT_REPOS_ROOT_PATH};
+use rdf_diff_store::git::{repo_metadata, ReusableRepoPool, GIT_REPOS_ROOT_PATH};
 use rdf_diff_store::metrics::{middleware::HttpMetrics, CACHE_COUNT};
 
 use rdf_diff_store::rdf::{APIPrettifier, RdfPrettifier};
@@ -91,6 +91,21 @@ async fn get_api_graphs(
     Ok(HttpResponse::Ok().message_body(""))
 }
 
+#[get("/api/metadata")]
+async fn get_api_metadata(
+    //request: HttpRequest,
+    repos: web::Data<async_lock::Mutex<ReusableRepoPool>>,
+) -> Result<impl Responder, Error> {
+    //validate_api_key(request)?;
+
+    let repo = ReusableRepoPool::pop(&repos).await;
+    let result = repo_metadata(&repo).await;
+    ReusableRepoPool::push(&repos, repo).await;
+
+    // Dont check result before pushing repo back into pool.
+    Ok(HttpResponse::Ok().json(result?))
+}
+
 #[derive(Clone)]
 struct State {
     cache: QueryCache,
@@ -136,6 +151,7 @@ async fn main() -> std::io::Result<()> {
             .service(metrics_endpoint)
             .service(get_api_sparql)
             .service(get_api_graphs)
+            .service(get_api_metadata)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(32)
