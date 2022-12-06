@@ -2,6 +2,7 @@ use actix_web::http::header;
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use rdf_diff_store::api::{livez, readyz};
 use rdf_diff_store::git::{repo_metadata, ReusableRepoPool, GIT_REPOS_ROOT_PATH};
+use rdf_diff_store::metrics::middleware::CACHE_LEVEL_HEADER;
 use rdf_diff_store::metrics::{middleware::HttpMetrics, CACHE_COUNT};
 
 use rdf_diff_store::rdf::{APIPrettifier, RdfPrettifier};
@@ -66,9 +67,11 @@ async fn get_api_sparql(
     ReusableRepoPool::push(&repos, repo).await;
 
     // Dont check result before pushing repo back into pool.
+    let (body, cache_lvl) = result?;
     Ok(HttpResponse::Ok()
         .insert_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-        .message_body(result?.0))
+        .insert_header((CACHE_LEVEL_HEADER, cache_lvl.to_string()))
+        .message_body(body))
 }
 
 #[get("/api/graphs/{timestamp}")]
@@ -87,7 +90,10 @@ async fn get_api_graphs(
     ReusableRepoPool::push(&repos, repo).await;
 
     // Dont check result before pushing repo back into pool.
-    Ok(HttpResponse::Ok().message_body(result?.0))
+    let (body, cache_lvl) = result?;
+    Ok(HttpResponse::Ok()
+        .insert_header((CACHE_LEVEL_HEADER, cache_lvl.to_string()))
+        .message_body(body))
 }
 
 #[get("/api/metadata")]

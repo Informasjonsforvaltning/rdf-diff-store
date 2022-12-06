@@ -1,4 +1,4 @@
-use std::{string::FromUtf8Error, time::Instant};
+use std::{fmt, string::FromUtf8Error, time::Instant};
 
 use git2::Repository;
 use moka::sync::Cache;
@@ -11,10 +11,17 @@ use crate::{
     rdf::{to_turtle, RdfPrettifier},
 };
 
+#[derive(Debug)]
 pub enum CacheLevel {
     Nothing,
     Graph,
     Query,
+}
+
+impl fmt::Display for CacheLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Clone)]

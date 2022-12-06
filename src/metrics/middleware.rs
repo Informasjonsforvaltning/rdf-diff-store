@@ -9,6 +9,8 @@ use reqwest::StatusCode;
 
 use super::HTTP_REQUEST_DURATION_SECONDS;
 
+pub const CACHE_LEVEL_HEADER: &str = "Cache-Level";
+
 // https://actix.rs/docs/middleware
 pub struct HttpMetrics;
 
@@ -56,9 +58,29 @@ where
             let res = fut.await?;
             let elapsed_time = start_time.elapsed().as_secs_f64();
 
+            let cache_lvl = res
+                .headers()
+                .get(CACHE_LEVEL_HEADER)
+                .and_then(|val| match val.to_str() {
+                    Ok(str) => Some(str),
+                    Err(e) => {
+                        tracing::error!(
+                            error = e.to_string(),
+                            "unable to convert Cache-Level header to string"
+                        );
+                        None
+                    }
+                })
+                .unwrap_or_default();
+
             if path.starts_with("/api") && res.status() != StatusCode::NOT_FOUND {
                 HTTP_REQUEST_DURATION_SECONDS
-                    .with_label_values(&[&method, &path, &res.status().as_u16().to_string()])
+                    .with_label_values(&[
+                        &method,
+                        &path,
+                        &res.status().as_u16().to_string(),
+                        cache_lvl,
+                    ])
                     .observe(elapsed_time);
             }
             Ok(res)
