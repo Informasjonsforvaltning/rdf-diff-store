@@ -15,7 +15,7 @@ spec:
       labels:
         app: fdk-dataset-rdf-query-cache
       annotations:
-        prometheus.io/scrape: 'true'
+        prometheus.io/scrape: "true"
     spec:
       containers:
         - env:
@@ -42,12 +42,12 @@ spec:
           image: rdf-query-cache
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - containerPort: 8081
           livenessProbe:
             httpGet:
               path: /livez
-              port: 8080
+              port: 8081
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 8080
+              port: 8081
