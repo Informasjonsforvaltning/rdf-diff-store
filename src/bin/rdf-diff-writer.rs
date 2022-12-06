@@ -112,7 +112,6 @@ async fn main() -> std::io::Result<()> {
             let repo = ReusableRepoPool::pop(&REPO_POOL).await;
             if let Err(e) = push_updates(&repo) {
                 tracing::error!(error = e.to_string(), "unable to push updates");
-                std::process::exit(1)
             }
             ReusableRepoPool::push(&REPO_POOL, repo).await;
         }
