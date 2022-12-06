@@ -20,7 +20,7 @@ lazy_static! {
             common_opts: Opts::new("http_requests_duration_seconds", "Response Times"),
             buckets: vec![0.05, 0.25, 1.0, 2.5, 5.0, 10.0, 25.0],
         },
-        &["method", "endpoint", "status"]
+        &["method", "endpoint", "status", "cache_level"]
     )
     .unwrap_or_else(|e| {
         tracing::error!(error = e.to_string(), "http_requests_duration_seconds");

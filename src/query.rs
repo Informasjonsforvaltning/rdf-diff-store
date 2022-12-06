@@ -1,4 +1,4 @@
-use std::{string::FromUtf8Error, time::Instant};
+use std::{fmt, string::FromUtf8Error, time::Instant};
 
 use git2::Repository;
 use moka::sync::Cache;
@@ -10,6 +10,19 @@ use crate::{
     metrics::{GRAPH_PARSE_TIME, QUERY_PROCESSING_TIME},
     rdf::{to_turtle, RdfPrettifier},
 };
+
+#[derive(Debug)]
+pub enum CacheLevel {
+    Nothing,
+    Graph,
+    Query,
+}
+
+impl fmt::Display for CacheLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Clone)]
 pub struct QueryCache {
@@ -34,9 +47,9 @@ pub async fn graphs_with_cache<P: RdfPrettifier>(
     repo: &Repository,
     cache: &QueryCache,
     timestamp: u64,
-) -> Result<(String, u64), Error> {
+) -> Result<(String, CacheLevel), Error> {
     if let Some(graphs) = cache.graphs_cache.get(&timestamp) {
-        Ok((graphs, 1))
+        Ok((graphs, CacheLevel::Graph))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
         let graphs = rdf_prettifier
@@ -46,7 +59,7 @@ pub async fn graphs_with_cache<P: RdfPrettifier>(
         cache.store_cache.insert(timestamp, graph_store);
         cache.graphs_cache.insert(timestamp, graphs.clone());
 
-        Ok((graphs, 0))
+        Ok((graphs, CacheLevel::Nothing))
     }
 }
 
@@ -57,16 +70,16 @@ pub async fn query_with_cache<P: RdfPrettifier>(
     cache: &QueryCache,
     timestamp: u64,
     query: String,
-) -> Result<(String, u64), Error> {
+) -> Result<(String, CacheLevel), Error> {
     if let Some(query_result) = cache.query_cache.get(&(timestamp, query.clone())) {
-        Ok((query_result, 2))
+        Ok((query_result, CacheLevel::Query))
     } else if let Some(graph_store) = cache.store_cache.get(&timestamp) {
         let query_result = execute_query_in_store(&graph_store, &query)?;
         cache
             .query_cache
             .insert((timestamp, query), query_result.clone());
 
-        Ok((query_result, 1))
+        Ok((query_result, CacheLevel::Graph))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
         // TODO: Cache graph. Does it need to be prettified? Could it be done in a separate thread?
@@ -81,7 +94,7 @@ pub async fn query_with_cache<P: RdfPrettifier>(
             .query_cache
             .insert((timestamp, query), query_result.clone());
 
-        Ok((query_result, 0))
+        Ok((query_result, CacheLevel::Nothing))
     }
 }
 
