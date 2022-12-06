@@ -30,6 +30,15 @@ components:
       required:
         - id
         - graph
+    Metadata:
+      type: object
+      properties:
+        start_time:
+          type: integer
+          format: int64
+        end_time:
+          type: integer
+          format: int64
 
 paths:
   /api/graphs/{timestamp}:
