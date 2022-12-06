@@ -52,7 +52,7 @@ pub async fn graphs_with_cache<P: RdfPrettifier>(
 
 /// Query timestamp with cache. Return cache level alongside raw JSON result string.
 pub async fn query_with_cache<P: RdfPrettifier>(
-    rdf_prettifier: &P,
+    _rdf_prettifier: &P,
     repo: &Repository,
     cache: &QueryCache,
     timestamp: u64,
@@ -69,13 +69,14 @@ pub async fn query_with_cache<P: RdfPrettifier>(
         Ok((query_result, 1))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = rdf_prettifier
-            .prettify(to_turtle(&graph_store)?.as_str())
-            .await?;
+        // TODO: Cache graph. Does it need to be prettified? Could it be done in a separate thread?
+        // let graphs = rdf_prettifier
+        //     .prettify(to_turtle(&graph_store)?.as_str())
+        //     .await?;
         let query_result = execute_query_in_store(&graph_store, &query)?;
 
         cache.store_cache.insert(timestamp, graph_store);
-        cache.graphs_cache.insert(timestamp, graphs);
+        // cache.graphs_cache.insert(timestamp, graphs);
         cache
             .query_cache
             .insert((timestamp, query), query_result.clone());
