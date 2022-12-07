@@ -16,6 +16,7 @@ pub enum CacheLevel {
     Nothing,
     Graph,
     Query,
+    Prettified,
 }
 
 impl fmt::Display for CacheLevel {
@@ -49,17 +50,21 @@ pub async fn graphs_with_cache<P: RdfPrettifier>(
     timestamp: u64,
 ) -> Result<(String, CacheLevel), Error> {
     if let Some(graphs) = cache.graphs_cache.get(&timestamp) {
-        Ok((graphs, CacheLevel::Graph))
+        Ok((graphs, CacheLevel::Prettified))
+    } else if let Some(graph_store) = cache.store_cache.get(&timestamp) {
+        let turtle = to_turtle(&graph_store)?;
+        let prettified = rdf_prettifier.prettify(&turtle).await?;
+
+        cache.graphs_cache.insert(timestamp, prettified.clone());
+        Ok((prettified, CacheLevel::Graph))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        let graphs = rdf_prettifier
-            .prettify(to_turtle(&graph_store)?.as_str())
-            .await?;
+        let turtle = to_turtle(&graph_store)?;
+        let prettified = rdf_prettifier.prettify(&turtle).await?;
 
         cache.store_cache.insert(timestamp, graph_store);
-        cache.graphs_cache.insert(timestamp, graphs.clone());
-
-        Ok((graphs, CacheLevel::Nothing))
+        cache.graphs_cache.insert(timestamp, prettified.clone());
+        Ok((prettified, CacheLevel::Nothing))
     }
 }
 
@@ -82,14 +87,9 @@ pub async fn query_with_cache<P: RdfPrettifier>(
         Ok((query_result, CacheLevel::Graph))
     } else {
         let graph_store = read_files_into_graph_store(repo, timestamp).await?;
-        // TODO: Cache graph. Does it need to be prettified? Could it be done in a separate thread?
-        // let graphs = rdf_prettifier
-        //     .prettify(to_turtle(&graph_store)?.as_str())
-        //     .await?;
         let query_result = execute_query_in_store(&graph_store, &query)?;
 
         cache.store_cache.insert(timestamp, graph_store);
-        // cache.graphs_cache.insert(timestamp, graphs);
         cache
             .query_cache
             .insert((timestamp, query), query_result.clone());
