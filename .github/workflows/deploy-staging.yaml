@@ -17,7 +17,8 @@ jobs:
       cargo_args: -- --test-threads 1
       rust_env: |
         GIT_REPOS_ROOT_PATH=./tmp-repos
-        GIT_REPO_URL=http://gitea:gitea123@localhost:3000/gitea/diff-store.git
+        GITEA_API_PATH=http://gitea:gitea123@localhost:3000/api
+        GIT_REPO_BASE_URL=http://gitea:gitea123@localhost:3000
 
   build-rdf-diff-writer:
     name: Build diff-writer when pull request is created
