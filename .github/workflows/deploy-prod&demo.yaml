@@ -54,6 +54,7 @@ jobs:
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
       app_name: rdf-query-cache
+      image: notinuse
       environment: staging
       cluster: digdir-prod-prod
     secrets:
@@ -68,6 +69,7 @@ jobs:
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
       app_name: rdf-query-cache
+      image: notinuse
       environment: demo
       cluster: digdir-fdk-dev
     secrets:
