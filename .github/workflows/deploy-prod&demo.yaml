@@ -26,7 +26,7 @@ jobs:
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: rdf-diff-writer
-      environment: staging
+      environment: prod
       build_env: true
       build_env_name: BINARY
       build_env_value: rdf-diff-writer
@@ -40,7 +40,7 @@ jobs:
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
       app_name: rdf-query-cache
-      environment: staging
+      environment: prod
       build_env: true
       build_env_name: BINARY
       build_env_value: rdf-query-cache
@@ -55,8 +55,8 @@ jobs:
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
       app_name: rdf-query-cache
-      environment: staging
-      cluster: digdir-prod-prod
+      environment: prod
+      cluster: digdir-fdk-prod
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DIGDIR_FDK_AUTODEPLOY: ${{ secrets.DIGDIR_FDK_PROD_AUTODEPLOY }}
