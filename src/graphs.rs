@@ -9,7 +9,7 @@ use tokio::{
 
 use crate::{
     error::Error,
-    git::{checkout_main_and_fetch_updates, checkout_timestamp, commit_file},
+    git::{checkout_timestamp, commit_file},
     metrics::FILE_READ_TIME,
     models,
     rdf::RdfPrettifier,
@@ -37,8 +37,6 @@ pub async fn store_graph<P: RdfPrettifier>(
     graph: &models::Graph,
 ) -> Result<(), Error> {
     let graph_content = rdf_prettifier.prettify(&graph.graph).await?;
-
-    checkout_main_and_fetch_updates(&repo)?;
 
     let valid_graph_filename = base64::encode(&graph.id)
         .replace("/", "_")
@@ -81,8 +79,6 @@ pub async fn store_graph<P: RdfPrettifier>(
 
 /// Delete graph.
 pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
-    checkout_main_and_fetch_updates(&repo)?;
-
     let valid_graph_filename = base64::encode(&id).replace("/", "_").replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
     let path = repo.path().join(Path::new(&filename));
@@ -100,8 +96,6 @@ pub async fn read_all_graph_files(
     repo: &Repository,
     timestamp: u64,
 ) -> Result<Vec<Vec<u8>>, Error> {
-    checkout_main_and_fetch_updates(&repo)?;
-
     let result = if checkout_timestamp(&repo, timestamp)? {
         let repo_dir = repo
             .path()

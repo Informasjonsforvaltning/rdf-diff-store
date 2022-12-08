@@ -12,7 +12,10 @@ use lazy_static::lazy_static;
 use rdf_diff_store::{
     api::{livez, readyz, validate_api_key},
     error::Error,
-    git::{push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH},
+    git::{
+        checkout_main_and_fetch_updates, push_updates, ReusableRepoPool, GIT_REPOS_ROOT_PATH,
+        GIT_REPO_URL,
+    },
     graphs::{delete_graph, store_graph},
     metrics::{get_metrics, middleware::HttpMetrics, register_metrics},
     models,
@@ -21,7 +24,7 @@ use rdf_diff_store::{
 
 lazy_static! {
     // Only 1 repo (basically a lock) to avoid conflicting pushes to git storage.
-    static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
+    static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> = web::Data::new(async_lock::Mutex::new(ReusableRepoPool::new(GIT_REPO_URL.clone(), GIT_REPOS_ROOT_PATH.clone(), 1).unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
         std::process::exit(1)
     })));
@@ -51,6 +54,7 @@ async fn post_api_graphs(
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
+    checkout_main_and_fetch_updates(&repo)?;
     let result = store_graph(&repo, &state.rdf_prettifier, &graph).await;
     ReusableRepoPool::push(&repos, repo).await;
 
@@ -76,6 +80,7 @@ async fn delete_api_graphs(
     let query_params = query.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
+    checkout_main_and_fetch_updates(&repo)?;
     let result = delete_graph(&repo, query_params.id).await;
     ReusableRepoPool::push(&repos, repo).await;
 

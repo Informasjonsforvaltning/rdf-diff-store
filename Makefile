@@ -6,8 +6,9 @@ test: dockerup rusttest dockerdown
 rusttest:
 	rm -rf ./tmp-repos/test
 	GIT_REPOS_ROOT_PATH=./tmp-repos/test \
-	GIT_REPO_URL=http://gitea:gitea123@localhost:3000/gitea/diff-store.git \
-		cargo test -- --test-threads 1
+	GIT_REPO_BASE_URL=http://gitea:gitea123@localhost:3000 \
+	GITEA_API_PATH=http://gitea:gitea123@localhost:3000/api \
+		cargo test -- --test-threads 1 --nocapture
 
 runwriter:
 	RDF_PRETTIFIER_URL=https://rdf-prettifier.staging.fellesdatakatalog.digdir.no/api/prettify \

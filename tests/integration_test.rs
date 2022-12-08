@@ -1,31 +1,22 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use actix_web::web;
-use lazy_static::lazy_static;
 use rdf_diff_store::{
-    git::{push_updates, ReusableRepoPool},
+    git::{checkout_main_and_fetch_updates, list_commit_times, push_updates, ReusableRepoPool},
     graphs::{read_all_graph_files, store_graph},
     models::Graph,
     rdf::RdfPrettifier,
 };
-use utils::NoOpPrettifier;
+use utils::{create_repo_pool, NoOpPrettifier};
 
 mod utils;
-
-lazy_static! {
-    static ref REPO_POOL: web::Data<async_lock::Mutex<ReusableRepoPool>> =
-        web::Data::new(async_lock::Mutex::new(
-            ReusableRepoPool::new("./tmp-repos".to_string(), 2)
-                .expect("unable to create repo pool")
-        ));
-}
 
 /// Store one graph, then store another, then check that graphs retured for the
 /// three timestamps are correct. The three timestamps beeing: before first
 /// graph is created, before second is created and after both are created.
 #[tokio::test]
-async fn test() {
-    let push_repo = ReusableRepoPool::pop(&REPO_POOL).await;
+async fn timestamps() {
+    let repo_pool = create_repo_pool("timestamps", 2).await;
+    let push_repo = ReusableRepoPool::pop(&repo_pool).await;
 
     let mut graph = Graph {
         id: "<#/(%¤=:".to_string(),
@@ -45,6 +36,7 @@ async fn test() {
         .as_secs()
         - 1;
 
+    checkout_main_and_fetch_updates(&push_repo).expect("unable to checkout main and fetch");
     store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
         .await
         .expect("unable to store graph");
@@ -73,7 +65,8 @@ async fn test() {
         + 1;
 
     // Use another repo from the pool to get graphs, to assert that fetch/pull works.
-    let pull_repo = ReusableRepoPool::pop(&REPO_POOL).await;
+    let pull_repo = ReusableRepoPool::pop(&repo_pool).await;
+    checkout_main_and_fetch_updates(&pull_repo).expect("unable to checkout main and fetch");
 
     // The following order (post -> pre -> mid) is chosen to test that the repo
     // is able to move both backwards and forwards in time.
@@ -96,20 +89,21 @@ async fn test() {
         .expect("unable to read graphs");
     assert_eq!(graphs_mid.len(), 1);
 
-    ReusableRepoPool::push(&REPO_POOL, pull_repo).await;
-    ReusableRepoPool::push(&REPO_POOL, push_repo).await;
+    ReusableRepoPool::push(&repo_pool, pull_repo).await;
+    ReusableRepoPool::push(&repo_pool, push_repo).await;
 }
 
 #[tokio::test]
 async fn test_no_diff() {
-    let push_repo = ReusableRepoPool::pop(&REPO_POOL).await;
+    let repo_pool = create_repo_pool("no-diff", 2).await;
+    let push_repo = ReusableRepoPool::pop(&repo_pool).await;
 
     let graph = Graph {
         id: "duplicate".to_string(),
         graph: r#"
         @prefix si: <https://www.w3schools.com/rdf/> .
 
-        <https://www.w3schools00.com> si:author "Jan Egil Refsnes" ;
+        <https://www.w3schools00.com> si:author "Jan Egil B" ;
             si:title "W3Schools" .
         "#
         .to_string(),
@@ -124,9 +118,8 @@ async fn test_no_diff() {
         .await
         .expect("unable to store graph");
 
-    push_updates(&push_repo).expect("unable to push");
+    let commit_times = list_commit_times(&push_repo).expect("unable to list commits");
+    assert_eq!(commit_times.len(), 1);
 
-    ReusableRepoPool::push(&REPO_POOL, push_repo).await;
-
-    // FIXME: must currently manually check that only 1 commit is made
+    ReusableRepoPool::push(&repo_pool, push_repo).await;
 }

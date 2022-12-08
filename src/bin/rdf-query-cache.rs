@@ -1,7 +1,10 @@
 use actix_web::http::header;
 use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
 use rdf_diff_store::api::{livez, readyz};
-use rdf_diff_store::git::{repo_metadata, ReusableRepoPool, GIT_REPOS_ROOT_PATH};
+use rdf_diff_store::git::{
+    checkout_main_and_fetch_updates, repo_metadata, ReusableRepoPool, GIT_REPOS_ROOT_PATH,
+    GIT_REPO_URL,
+};
 use rdf_diff_store::metrics::middleware::CACHE_LEVEL_HEADER;
 use rdf_diff_store::metrics::{middleware::HttpMetrics, CACHE_COUNT};
 
@@ -56,6 +59,7 @@ async fn get_api_sparql(
     let query_params = query.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
+    checkout_main_and_fetch_updates(&repo)?;
     let result = query_with_cache(
         &state.rdf_prettifier,
         &repo,
@@ -86,6 +90,7 @@ async fn get_api_graphs(
     let timestamp = path.into_inner();
 
     let repo = ReusableRepoPool::pop(&repos).await;
+    checkout_main_and_fetch_updates(&repo)?;
     let result = graphs_with_cache(&state.rdf_prettifier, &repo, &state.cache, timestamp).await;
     ReusableRepoPool::push(&repos, repo).await;
 
@@ -104,6 +109,7 @@ async fn get_api_metadata(
     //validate_api_key(request)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
+    checkout_main_and_fetch_updates(&repo)?;
     let result = repo_metadata(&repo).await;
     ReusableRepoPool::push(&repos, repo).await;
 
@@ -128,10 +134,11 @@ async fn main() -> std::io::Result<()> {
 
     register_metrics();
 
-    let repo_pool = ReusableRepoPool::new(GIT_REPOS_ROOT_PATH.clone(), 32).unwrap_or_else(|e| {
-        tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
-        std::process::exit(1)
-    });
+    let repo_pool = ReusableRepoPool::new(GIT_REPO_URL.clone(), GIT_REPOS_ROOT_PATH.clone(), 32)
+        .unwrap_or_else(|e| {
+            tracing::error!(error = e.to_string().as_str(), "unable to create repo pool");
+            std::process::exit(1)
+        });
     let repo_pool = web::Data::new(async_lock::Mutex::new(repo_pool));
 
     let state = State {

@@ -23,7 +23,7 @@ lazy_static! {
             );
             std::process::exit(1)
         });
-    static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
+    pub static ref GIT_REPO_URL: String = env::var("GIT_REPO_URL").unwrap_or_else(|e| {
         tracing::error!(error = e.to_string().as_str(), "GIT_REPO_URL not found");
         std::process::exit(1)
     });
@@ -35,10 +35,10 @@ pub struct ReusableRepoPool {
 
 impl ReusableRepoPool {
     /// Create a pool of repos, each in a subfolder of the given path.
-    pub fn new(root_path: String, size: u64) -> Result<Self, Error> {
+    pub fn new(git_repo_url: String, root_path: String, size: u64) -> Result<Self, Error> {
         let path = format!("{}/0", root_path);
         // Repo might already exist (persistent volume)
-        Repository::open(&path).or_else(|_| Repository::clone(&GIT_REPO_URL, &path))?;
+        Repository::open(&path).or_else(|_| Repository::clone(&git_repo_url, &path))?;
 
         // Create n copies of the same repo, no need to clone n-1 more times.
         for i in 1..size {
@@ -76,7 +76,6 @@ impl ReusableRepoPool {
 
 /// Metadata.
 pub async fn repo_metadata(repo: &Repository) -> Result<Metadata, Error> {
-    checkout_main_and_fetch_updates(&repo)?;
     let commit_time = list_commit_times(repo)?;
 
     Ok(Metadata {
@@ -132,7 +131,7 @@ pub fn checkout_main_and_fetch_updates(repo: &Repository) -> Result<bool, Error>
     Ok(updated)
 }
 
-fn list_commit_times(repo: &Repository) -> Result<Vec<(Time, Oid)>, Error> {
+pub fn list_commit_times(repo: &Repository) -> Result<Vec<(Time, Oid)>, Error> {
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::REVERSE)?;
     revwalk.push_head()?;
