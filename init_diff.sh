@@ -1,6 +1,8 @@
 # Files from mongodb exports must be in current directory:
 #   turtle.json
 #   datasetMeta.json
+#
+# Requires python and rdflib
 
 
 rm -rf diff-repo
