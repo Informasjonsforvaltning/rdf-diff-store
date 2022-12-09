@@ -103,4 +103,6 @@ for action in $(cat actions_sorted); do
 done
 
 export FILTER_BRANCH_SQUELCH_WARNING=1
-cd diff-store && git filter-branch --env-filter 'export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"'
+cd diff-repo
+git filter-branch --env-filter 'export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"'
+cd ..
