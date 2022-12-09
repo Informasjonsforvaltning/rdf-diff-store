@@ -1,7 +1,6 @@
 # Files from mongodb exports must be in current directory:
-# turtle.json
-# datasetMeta.json
-# fdkCatalogs.json
+#   turtle.json
+#   datasetMeta.json
 
 
 rm -rf diff-repo
@@ -15,14 +14,14 @@ for meta in $(cat datasetMeta.json | jq -c .[]); do
     catalog=$(echo $meta | jq -r .isPartOf)
     issued=$(echo $meta | jq -c .issued | cut -d '"' -f4)
     modified=$(echo $meta | jq -c .modified | cut -d '"' -f4)
-    turtle_id=$(cat turtle_ids.txt | grep "$fdkid")
+    turtle_id=$(cat turtle_ids.txt | grep "dataset-$fdkid")
 
 
     if [[ "$uri" != "" ]] && [[ "$fdkid" != "" ]] && [[ "$catalog" != "" ]] && [[ "$turtle_id" != "" ]] && [[ "$issued" != "" ]] && [[ "$modified" != "" ]]; then
-        catalog_turtle_id=$(echo $catalog | cut -d "/" -f5)
+        catalog_turtle_id=catalog-$(echo $catalog | cut -d "/" -f5)
 
         turtle=$(cat turtle.json | jq -r ".[] | select(._id == \"$turtle_id\") | .turtle" | base64 -d | gunzip -f -)
-        catalog_turtle=$(cat fdkCatalogs.json | jq -r ".[] | select(._id == \"$catalog_turtle_id\") | .turtle" | base64 -d | gunzip -f -)
+        catalog_turtle=$(cat turtle.json | jq -r ".[] | select(._id == \"$catalog_turtle_id\") | .turtle" | base64 -d | gunzip -f -)
 
         if [[ "$turtle" != "" ]] && [[ "$catalog_turtle" != "" ]]; then
             exists=$(echo $catalog_turtle | tr ";" "\n" | grep $uri | grep "dcat:dataset")
@@ -33,6 +32,10 @@ for meta in $(cat datasetMeta.json | jq -c .[]); do
                 echo $modified delete $fdkid $uri | tee -a actions
             fi
         else
+        if true; then
+            echo turtle: $turtle_id > /dev/stderr
+            echo catalog_turtle_id: $catalog_turtle_id > /dev/stderr
+        fi
             echo NO TURTLE FOUND > /dev/stderr
         fi
     else
