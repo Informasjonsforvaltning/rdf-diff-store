@@ -1,0 +1,18 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fdk-dataset-query-cache
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: fdk-dataset-query-cache.prod.fellesdatakatalog.digdir.no
+      http:
+        paths:
+          - backend:
+              service:
+                name: fdk-dataset-rdf-query-cache
+                port:
+                  number: 8080
+            path: /
+            pathType: Prefix

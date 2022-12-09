@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: prod
 resources:
   - ../base
+  - ingress.yaml
