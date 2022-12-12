@@ -1,6 +1,6 @@
 # Files from mongodb exports must be in current directory:
-#   turtle.json
-#   datasetMeta.json
+#   turtle.json (datasetHarvester/turtle)
+#   datasetMeta.json (datasetHarvester/datasetMeta)
 #
 # Requires python and rdflib
 
@@ -68,7 +68,7 @@ for action in $(cat actions_sorted); do
     actiontype=$(echo $action | cut -d ";" -f2)
     fdkid=$(echo $action | cut -d ";" -f3)
 
-    turtle_id=$(cat turtle_ids.txt | grep "$fdkid")
+    turtle_id=$(cat turtle_ids.txt | grep "dataset-$fdkid")
 
     fname=$(python -c "import sys; from base64 import b64encode; print(b64encode('$fdkid'.encode('utf-8')).decode('utf-8').replace('/', '_').replace('+', '-') + '.ttl')")
 
