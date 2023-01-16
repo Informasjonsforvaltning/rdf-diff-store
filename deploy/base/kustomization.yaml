@@ -2,11 +2,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - deployment-rdf-diff-writer.yaml
-  - deployment-rdf-query-cache.yaml
-  - pvc-rdf-diff-writer.yaml
-  - service-rdf-diff-writer.yaml
-  - service-rdf-query-cache.yaml
+  - deployment-dataset-rdf-diff-writer.yaml
+  - deployment-dataset-rdf-query-cache.yaml
+  - pvc-dataset-rdf-diff-writer.yaml
+  - service-dataset-rdf-diff-writer.yaml
+  - service-dataset-rdf-query-cache.yaml
 images:
   - name: rdf-diff-writer
     newName: eu.gcr.io/digdir-fdk-infra/rdf-diff-writer
