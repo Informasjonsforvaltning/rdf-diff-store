@@ -1,0 +1,53 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fdk-concept-rdf-query-cache
+  labels:
+    app: fdk-concept-rdf-query-cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fdk-concept-rdf-query-cache
+  template:
+    metadata:
+      labels:
+        app: fdk-concept-rdf-query-cache
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+        - env:
+            - name: GIT_REPOS_ROOT_PATH
+              value: /repos
+            - name: GIT_REPO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-concept-rdf-diff-store
+                  key: GIT_REPO_URL
+            - name: RDF_PRETTIFIER_URL
+              value: http://rdf-prettifier/api/prettify
+            - name: RDF_PRETTIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: API_KEY
+                  name: rdf-prettifier
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-concept-rdf-diff-store
+                  key: API_KEY
+          name: fdk-concept-query-cache
+          image: rdf-query-cache
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
