@@ -2,9 +2,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - deployment-concept-rdf-diff-writer.yaml
+  - deployment-concept-rdf-query-cache.yaml
   - deployment-dataset-rdf-diff-writer.yaml
   - deployment-dataset-rdf-query-cache.yaml
+  - pvc-concept-rdf-diff-writer.yaml
   - pvc-dataset-rdf-diff-writer.yaml
+  - service-concept-rdf-diff-writer.yaml
+  - service-concept-rdf-query-cache.yaml
   - service-dataset-rdf-diff-writer.yaml
   - service-dataset-rdf-query-cache.yaml
 images:

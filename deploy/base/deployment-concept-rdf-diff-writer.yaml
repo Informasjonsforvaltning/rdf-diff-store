@@ -1,0 +1,62 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fdk-concept-rdf-diff-writer
+  labels:
+    app: fdk-concept-rdf-diff-writer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fdk-concept-rdf-diff-writer
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: fdk-concept-rdf-diff-writer
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      containers:
+        - env:
+            - name: GIT_REPOS_ROOT_PATH
+              value: /repo
+            - name: GIT_REPO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-concept-rdf-diff-store
+                  key: GIT_REPO_URL
+            - name: RDF_PRETTIFIER_URL
+              value: http://rdf-prettifier/api/prettify
+            - name: RDF_PRETTIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: API_KEY
+                  name: rdf-prettifier
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-concept-rdf-diff-store
+                  key: API_KEY
+          name: fdk-concept-rdf-diff-writer
+          image: rdf-diff-writer
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: repo
+              mountPath: /repo
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+      volumes:
+        - name: repo
+          persistentVolumeClaim:
+            claimName: fdk-concept-rdf-diff-writer
