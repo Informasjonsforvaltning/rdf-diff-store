@@ -130,6 +130,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(
                 Logger::default()
+                    .exclude("/")
                     .exclude("/livez".to_string())
                     .exclude("/readyz".to_string())
                     .exclude("/metrics".to_string())
