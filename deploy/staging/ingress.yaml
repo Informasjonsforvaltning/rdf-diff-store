@@ -16,6 +16,16 @@ spec:
                   number: 8080
             path: /
             pathType: Prefix
+    - host: fdk-data-service-query-cache.staging.fellesdatakatalog.digdir.no
+      http:
+        paths:
+          - backend:
+              service:
+                name: fdk-data-service-rdf-query-cache
+                port:
+                  number: 8080
+            path: /
+            pathType: Prefix
     - host: fdk-concept-query-cache.staging.fellesdatakatalog.digdir.no
       http:
         paths:
