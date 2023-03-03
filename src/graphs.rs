@@ -1,5 +1,6 @@
 use std::{env, io::Cursor, path::Path, time::Instant};
 
+use base64::{engine::general_purpose, Engine as _};
 use git2::Repository;
 use lazy_static::lazy_static;
 use tokio::{
@@ -38,7 +39,7 @@ pub async fn store_graph<P: RdfPrettifier>(
 ) -> Result<(), Error> {
     let graph_content = rdf_prettifier.prettify(&graph.graph).await?;
 
-    let valid_graph_filename = base64::encode(&graph.id)
+    let valid_graph_filename = general_purpose::STANDARD.encode(&graph.id)
         .replace("/", "_")
         .replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
@@ -79,7 +80,7 @@ pub async fn store_graph<P: RdfPrettifier>(
 
 /// Delete graph.
 pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
-    let valid_graph_filename = base64::encode(&id).replace("/", "_").replace("+", "-");
+    let valid_graph_filename = general_purpose::STANDARD.encode(&id).replace("/", "_").replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
     let path = repo.path().join(Path::new(&filename));
 
