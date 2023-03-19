@@ -20,7 +20,7 @@ prometheus = "0.13.2"
 reqwest = { version = "0.11.12", features = ["json"] }
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.93"
-thiserror = "1.0.31"
+thiserror = "1.0.40"
 tokio = { version = "1.25.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.16", features = ["json"] }
