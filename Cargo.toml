@@ -14,7 +14,7 @@ futures-util = "0.3.27"
 git2 = "0.16.1"
 lazy_static = "1.4.0"
 mime = "0.3.16"
-moka = "0.10.2"
+moka = "0.11.2"
 oxigraph = "0.3.6"
 prometheus = "0.13.2"
 reqwest = { version = "0.11.12", features = ["json"] }
