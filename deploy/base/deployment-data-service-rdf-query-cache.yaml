@@ -43,6 +43,9 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8081
+          resources:
+            requests:
+              memory: "750Mi"
           livenessProbe:
             httpGet:
               path: /livez

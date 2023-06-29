@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Run tests when pull request is created
+    name: Run tests on merge to main
     if: github.event.pull_request.draft == false
     uses: Informasjonsforvaltning/workflows/.github/workflows/test-rust.yaml@main
     secrets:
@@ -20,41 +20,30 @@ jobs:
         GIT_REPO_BASE_URL=http://gitea:gitea123@localhost:3000
         GITEA_API_PATH=http://gitea:gitea123@localhost:3000/api
 
-  build-rdf-diff-writer:
-    name: Build diff-writer when pull request is created
-    if: github.event.pull_request.draft == false
+  build:
+    name: Build diff-writer on merge to main
+    needs: [test]
+    strategy:
+      matrix:
+        app_name: [rdf-diff-writer, rdf-query-cache]
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
-      app_name: rdf-diff-writer
+      app_name: ${{ matrix.app_name }}
       environment: prod
       build_env: true
       build_env_name: BINARY
-      build_env_value: rdf-diff-writer
-    secrets:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
-
-  build-rdf-query-cache:
-    name: Build query-cache when pull request is created
-    if: github.event.pull_request.draft == false
-    uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
-    with:
-      app_name: rdf-query-cache
-      environment: prod
-      build_env: true
-      build_env_name: BINARY
-      build_env_value: rdf-query-cache
+      build_env_value: ${{ matrix.app_name }}
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
 
   deploy:
-    name: Deploy to prod environment with reusable workflow
+    name: Deploy to prod environment
     if: github.event.pull_request.draft == false
-    needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
+    needs: [test, build]
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
-      app_name: rdf-query-cache
+      app_name: rdf-diff-store
       environment: prod
       cluster: digdir-fdk-prod
     secrets:
@@ -63,12 +52,12 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy_demo:
-    name: Deploy to demo environment with reusable workflow
+    name: Deploy to demo environment
     if: github.event.pull_request.draft == false
-    needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
+    needs: [deploy]
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
-      app_name: rdf-query-cache
+      app_name: rdf-diff-store
       environment: demo
       cluster: digdir-fdk-dev
     secrets:

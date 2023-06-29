@@ -48,6 +48,9 @@ spec:
               mountPath: /repo
           ports:
             - containerPort: 8080
+          resources:
+            requests:
+              memory: "100Mi"
           livenessProbe:
             httpGet:
               path: /livez
