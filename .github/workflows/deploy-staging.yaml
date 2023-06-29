@@ -20,41 +20,31 @@ jobs:
         GIT_REPO_BASE_URL=http://gitea:gitea123@localhost:3000
         GITEA_API_PATH=http://gitea:gitea123@localhost:3000/api
 
-  build-rdf-diff-writer:
+  build:
     name: Build diff-writer when pull request is created
-    if: github.event.pull_request.draft == false
+    if: ${{ github.actor != 'dependabot[bot]' && github.event.pull_request.draft == false }}
+    needs: [test]
+    strategy:
+      matrix:
+        app_name: [rdf-diff-writer, rdf-query-cache]
     uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
     with:
-      app_name: rdf-diff-writer
+      app_name: ${{ matrix.app_name }}
       environment: staging
       build_env: true
       build_env_name: BINARY
-      build_env_value: rdf-diff-writer
-    secrets:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
-
-  build-rdf-query-cache:
-    name: Build query-cache when pull request is created
-    if: github.event.pull_request.draft == false
-    uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
-    with:
-      app_name: rdf-query-cache
-      environment: staging
-      build_env: true
-      build_env_name: BINARY
-      build_env_value: rdf-query-cache
+      build_env_value: ${{ matrix.app_name }}
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GCP_SA_DIGDIR_FDK_GCR_KEY: ${{ secrets.GCP_SA_DIGDIR_FDK_GCR_KEY }}
 
   deploy:
-    name: Deploy to staging environment with reusable workflow
+    name: Deploy to staging environment
     if: github.event.pull_request.draft == false
-    needs: [test, build-rdf-diff-writer, build-rdf-query-cache]
+    needs: [test, build]
     uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
     with:
-      app_name: rdf-query-cache
+      app_name: rdf-diff-store
       environment: staging
       cluster: digdir-fdk-dev
     secrets:
