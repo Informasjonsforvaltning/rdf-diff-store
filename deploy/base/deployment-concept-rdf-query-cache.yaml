@@ -45,12 +45,24 @@ spec:
             - containerPort: 8081
           resources:
             requests:
-              memory: "7500Mi"
+              cpu: "500m"
+              memory: "5Gi"
+            limits:
+              cpu: "1"
+              memory: "8Gi"
           livenessProbe:
+            failureThreshold: 3
             httpGet:
               path: /livez
               port: 8081
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 1
           readinessProbe:
+            failureThreshold: 3
             httpGet:
               path: /readyz
               port: 8081
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 1
