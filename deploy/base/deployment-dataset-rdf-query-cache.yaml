@@ -52,10 +52,11 @@ spec:
               memory: "8Gi"
           livenessProbe:
             failureThreshold: 3
+            initialDelaySeconds: 120
             httpGet:
               path: /livez
               port: 8081
-            periodSeconds: 30
+            periodSeconds: 90
             successThreshold: 1
             timeoutSeconds: 1
           readinessProbe:
@@ -63,6 +64,6 @@ spec:
             httpGet:
               path: /readyz
               port: 8081
-            periodSeconds: 30
+            periodSeconds: 90
             successThreshold: 1
             timeoutSeconds: 1
