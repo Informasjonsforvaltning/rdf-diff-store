@@ -51,10 +51,9 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "50Mi"
+              memory: "100Mi"
             limits:
-              cpu: "500m"
-              memory: "500Mi"
+              memory: "100Mi"
           livenessProbe:
             failureThreshold: 3
             httpGet:
