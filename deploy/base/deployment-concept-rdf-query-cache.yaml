@@ -45,11 +45,10 @@ spec:
             - containerPort: 8081
           resources:
             requests:
-              cpu: "500m"
-              memory: "5Gi"
+              cpu: "200m"
+              memory: "4Gi"
             limits:
-              cpu: "1"
-              memory: "8Gi"
+              memory: "4Gi"
           livenessProbe:
             failureThreshold: 3
             initialDelaySeconds: 120
