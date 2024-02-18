@@ -1879,7 +1879,7 @@ version = "0.1.0"
 dependencies = [
  "actix-rt",
  "actix-web",
- "async-lock 2.8.0",
+ "async-lock 3.3.0",
  "async-std",
  "async-trait",
  "base64",

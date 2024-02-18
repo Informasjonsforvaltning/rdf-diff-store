@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 actix-rt = "2.7.0"
 actix-web = "4.5.1"
-async-lock = "2.5.0"
+async-lock = "3.3.0"
 async-std = "1.12.0"
 async-trait = "0.1.68"
 base64 = "0.21.0"
