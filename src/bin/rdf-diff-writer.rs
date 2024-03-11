@@ -42,20 +42,29 @@ async fn metrics_endpoint() -> impl Responder {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateGraphQueryParams {
+    timestamp: u64,
+}
+
 #[post("/api/graphs")]
 async fn post_api_graphs(
     request: HttpRequest,
+    query: web::Query<UpdateGraphQueryParams>,
     state: web::Data<State>,
     repos: web::Data<async_lock::Mutex<ReusableRepoPool>>,
     body: web::Bytes,
 ) -> Result<impl Responder, Error> {
     validate_api_key(request)?;
 
+    let query_params = query.into_inner();
+
     let graph: models::Graph = serde_json::from_str(from_utf8(&body)?)?;
 
     let repo = ReusableRepoPool::pop(&repos).await;
     checkout_main_and_fetch_updates(&repo)?;
-    let result = store_graph(&repo, &state.rdf_prettifier, &graph).await;
+
+    let result = store_graph(&repo, &state.rdf_prettifier, &graph, query_params.timestamp).await;
     ReusableRepoPool::push(&repos, repo).await;
 
     // Dont check result before pushing repo back into pool.
@@ -67,6 +76,7 @@ async fn post_api_graphs(
 #[derive(Debug, Deserialize)]
 pub struct DeleteGraphQueryParams {
     id: String,
+    timestamp: u64,
 }
 
 #[delete("/api/graphs")]
@@ -81,7 +91,7 @@ async fn delete_api_graphs(
 
     let repo = ReusableRepoPool::pop(&repos).await;
     checkout_main_and_fetch_updates(&repo)?;
-    let result = delete_graph(&repo, query_params.id).await;
+    let result = delete_graph(&repo, query_params.id, query_params.timestamp).await;
     ReusableRepoPool::push(&repos, repo).await;
 
     // Dont check result before pushing repo back into pool.

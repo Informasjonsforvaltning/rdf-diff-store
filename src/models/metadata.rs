@@ -14,9 +14,9 @@
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Metadata {
     #[serde(rename = "start_time", skip_serializing_if = "Option::is_none")]
-    pub start_time: Option<i64>,
+    pub start_time: Option<u64>,
     #[serde(rename = "end_time", skip_serializing_if = "Option::is_none")]
-    pub end_time: Option<i64>,
+    pub end_time: Option<u64>,
 }
 
 impl Metadata {

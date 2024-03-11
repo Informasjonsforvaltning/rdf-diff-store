@@ -5,7 +5,7 @@ use std::{
 };
 
 use actix_web::web;
-use git2::{Commit, Oid, Repository, Signature, Time};
+use git2::{Commit, Oid, Repository, Signature};
 use lazy_static::lazy_static;
 
 use crate::{
@@ -79,8 +79,8 @@ pub async fn repo_metadata(repo: &Repository) -> Result<Metadata, Error> {
     let commit_time = list_commit_times(repo)?;
 
     Ok(Metadata {
-        start_time: commit_time.first().map(|(time, _)| time.seconds()),
-        end_time: commit_time.last().map(|(time, _)| time.seconds()),
+        start_time: commit_time.first().map(|(time, _)| *time),
+        end_time: commit_time.last().map(|(time, _)| *time),
     })
 }
 
@@ -131,7 +131,7 @@ pub fn checkout_main_and_fetch_updates(repo: &Repository) -> Result<bool, Error>
     Ok(updated)
 }
 
-pub fn list_commit_times(repo: &Repository) -> Result<Vec<(Time, Oid)>, Error> {
+pub fn list_commit_times(repo: &Repository) -> Result<Vec<(u64, Oid)>, Error> {
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::REVERSE)?;
     revwalk.push_head()?;
@@ -141,41 +141,59 @@ pub fn list_commit_times(repo: &Repository) -> Result<Vec<(Time, Oid)>, Error> {
     for oid in revwalk {
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
-        commit_times.push((commit.time(), oid));
+        let msg = commit.message().unwrap_or("0");
+        commit_times.push((timestamp_from_message(msg), oid));
     }
 
     Ok(commit_times)
+}
+
+fn timestamp_from_message(msg: &str) -> u64 {
+    let ts_str = msg.split_whitespace()
+        .next()
+        .unwrap_or("0");
+
+    match ts_str.parse::<u64>() {
+        Ok(parsed) => {parsed}
+        Err(_) => {0}
+    }
+}
+
+fn oid_of_timestamp(repo: &Repository, timestamp: u64) -> Option<Oid> {
+    let commit_times = list_commit_times(repo).ok()?;
+
+    let res = commit_times.binary_search_by(|(time, _)| time.cmp(&timestamp));
+
+    match res {
+        Ok(0) | Err(0) => None,
+        Ok(i) | Err(i) => Some(commit_times[i - 1].1)
+    }
 }
 
 /// Checkout a timestamp. Returns false if no files exists at that point in time.
 pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Error> {
     let start_time = Instant::now();
 
-    let commit_times = list_commit_times(repo)?;
+    let result = if let Some(oid) = oid_of_timestamp(repo, timestamp) {
+        let commit = repo.find_commit(oid)?;
 
-    let ts = timestamp as i64;
-    let result = match commit_times.binary_search_by(|(time, _)| time.seconds().cmp(&ts)) {
-        Err(0) => Ok(false),
-        Ok(i) | Err(i) => {
-            let oid = commit_times[i - 1].1;
-            let commit = repo.find_commit(oid)?;
-
-            match repo.branch(&oid.to_string(), &commit, false) {
-                Ok(_) => {}
-                Err(e) => {
-                    if e.class() != git2::ErrorClass::Reference
-                        && e.code() != git2::ErrorCode::Exists
-                    {
-                        return Err(e.into());
-                    }
+        match repo.branch(&oid.to_string(), &commit, false) {
+            Ok(_) => {}
+            Err(e) => {
+                if e.class() != git2::ErrorClass::Reference
+                    && e.code() != git2::ErrorCode::Exists
+                {
+                    return Err(e.into());
                 }
             }
-
-            let refname = format!("refs/heads/{}", &oid.to_string());
-            repo.set_head(&refname)?;
-            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-            Ok(true)
         }
+
+        let refname = format!("refs/heads/{}", &oid.to_string());
+        repo.set_head(&refname)?;
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+        Ok(true)
+    } else {
+        Ok(false)
     };
 
     let elapsed_millis = start_time.elapsed().as_millis();

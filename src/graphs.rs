@@ -36,6 +36,7 @@ pub async fn store_graph<P: RdfPrettifier>(
     repo: &Repository,
     rdf_prettifier: &P,
     graph: &models::Graph,
+    timestamp: u64,
 ) -> Result<(), Error> {
     let graph_content = rdf_prettifier.prettify(&graph.graph).await?;
 
@@ -68,7 +69,7 @@ pub async fn store_graph<P: RdfPrettifier>(
     commit_file(
         &repo,
         &Path::new(&filename).into(),
-        format!("update: {}", graph.id),
+        format!("{} - update: {}", timestamp, graph.id),
     )
     .await?;
 
@@ -79,15 +80,17 @@ pub async fn store_graph<P: RdfPrettifier>(
 }
 
 /// Delete graph.
-pub async fn delete_graph(repo: &Repository, id: String) -> Result<(), Error> {
+pub async fn delete_graph(
+    repo: &Repository,
+    id: String,
+    timestamp: u64,
+) -> Result<(), Error> {
     let valid_graph_filename = general_purpose::STANDARD.encode(&id).replace("/", "_").replace("+", "-");
     let filename = format!("{}.ttl", valid_graph_filename);
     let path = repo.path().join(Path::new(&filename));
 
     remove_file(&path).await?;
-    commit_file(&repo, &path, format!("delete: {}", id)).await?;
-    // Push ever x seconds instead
-    // push_updates(&repo)?;
+    commit_file(&repo, &path, format!("{} - delete: {}", timestamp, id)).await?;
 
     Ok(())
 }

@@ -30,14 +30,13 @@ async fn timestamps() {
         format: Some("text/turtle".to_string()),
     };
 
-    let pre_time = SystemTime::now()
+    let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time err")
-        .as_secs()
-        - 1;
+        .as_secs();
 
     checkout_main_and_fetch_updates(&push_repo).expect("unable to checkout main and fetch");
-    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph, time - 1)
         .await
         .expect("unable to store graph");
     push_updates(&push_repo).expect("unable to push");
@@ -46,23 +45,12 @@ async fn timestamps() {
 
     std::thread::sleep(Duration::from_secs(1));
 
-    let mid_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time err")
-        .as_secs();
-
     std::thread::sleep(Duration::from_secs(1));
 
-    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph, time + 1)
         .await
         .expect("unable to store graph");
     push_updates(&push_repo).expect("unable to push");
-
-    let post_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time err")
-        .as_secs()
-        + 1;
 
     // Use another repo from the pool to get graphs, to assert that fetch/pull works.
     let pull_repo = ReusableRepoPool::pop(&repo_pool).await;
@@ -72,19 +60,19 @@ async fn timestamps() {
     // is able to move both backwards and forwards in time.
 
     // There should be 2 graphs when both are created.
-    let graphs_post = read_all_graph_files(&pull_repo, post_time)
+    let graphs_post = read_all_graph_files(&pull_repo, time + 2)
         .await
         .expect("unable to read graphs");
     assert_eq!(graphs_post.len(), 2);
 
     // There should be 0 graphs before the first is created.
-    let graphs_pre = read_all_graph_files(&pull_repo, pre_time)
+    let graphs_pre = read_all_graph_files(&pull_repo, time - 2)
         .await
         .expect("unable to read graphs");
     assert_eq!(graphs_pre.len(), 0);
 
     // There should be 1 graph between first and seconds is created.
-    let graphs_mid = read_all_graph_files(&pull_repo, mid_time)
+    let graphs_mid = read_all_graph_files(&pull_repo, time)
         .await
         .expect("unable to read graphs");
     assert_eq!(graphs_mid.len(), 1);
@@ -110,11 +98,11 @@ async fn test_no_diff() {
         format: Some("text/turtle".to_string()),
     };
 
-    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph, 10)
         .await
         .expect("unable to store graph");
 
-    store_graph(&push_repo, &NoOpPrettifier::new(), &graph)
+    store_graph(&push_repo, &NoOpPrettifier::new(), &graph, 11)
         .await
         .expect("unable to store graph");
 
