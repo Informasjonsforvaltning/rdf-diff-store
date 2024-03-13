@@ -70,6 +70,7 @@ pub async fn store_graph<P: RdfPrettifier>(
         &repo,
         &Path::new(&filename).into(),
         format!("{} - update: {}", timestamp, graph.id),
+        timestamp,
     )
     .await?;
 
@@ -90,7 +91,12 @@ pub async fn delete_graph(
     let path = repo.path().join(Path::new(&filename));
 
     remove_file(&path).await?;
-    commit_file(&repo, &path, format!("{} - delete: {}", timestamp, id)).await?;
+    commit_file(
+        &repo,
+        &path,
+        format!("{} - delete: {}", timestamp, id),
+        timestamp
+    ).await?;
 
     Ok(())
 }

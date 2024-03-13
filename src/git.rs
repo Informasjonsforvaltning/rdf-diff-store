@@ -5,7 +5,7 @@ use std::{
 };
 
 use actix_web::web;
-use git2::{Commit, Oid, Repository, Signature};
+use git2::{Commit, Oid, RebaseOptions, Repository, Signature};
 use lazy_static::lazy_static;
 
 use crate::{
@@ -207,7 +207,7 @@ pub fn checkout_timestamp(repo: &Repository, timestamp: u64) -> Result<bool, Err
 }
 
 /// Commit file.
-pub async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> Result<(), Error> {
+pub async fn commit_file(repo: &Repository, path: &PathBuf, message: String, timestamp: u64) -> Result<(), Error> {
     let start_time = Instant::now();
 
     let mut index = repo.index()?;
@@ -216,22 +216,55 @@ pub async fn commit_file(repo: &Repository, path: &PathBuf, message: String) -> 
 
     let tree_id = index.write_tree()?;
     let tree = repo.find_tree(tree_id)?;
-
-    let mut parents = Vec::new();
-    // repo.head() fails when empty repo is cloned and no commits exist. In that case, there is no parents.
-    if let Ok(Some(parent)) = repo.head().map(|r| r.target()) {
-        parents.push(repo.find_commit(parent)?);
-    }
-
     let signature = Signature::now("rdf-diff-store", "fellesdatakatalog@digdir.no")?;
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        message.as_str(),
-        &tree,
-        parents.iter().collect::<Vec<&Commit>>().as_slice(),
-    )?;
+
+    if let Err(_) = repo.head() {
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message.as_str(),
+            &tree,
+            &[],
+        )?;
+    } else {
+        let head_target = repo.head().unwrap().target().unwrap();
+        let tip = repo.find_commit(head_target).unwrap();
+        let upstream = repo.find_annotated_commit(tip.id()).unwrap();
+
+        checkout_timestamp(repo, timestamp).unwrap();
+
+        let mut parents = Vec::new();
+        if let Ok(Some(parent)) = repo.head().map(|r| r.target()) {
+            parents.push(repo.find_commit(parent)?);
+        }
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message.as_str(),
+            &tree,
+            parents.iter().collect::<Vec<&Commit>>().as_slice(),
+        ).unwrap();
+
+        let ts_target = repo.head().unwrap().target().unwrap();
+        let ts_tip = repo.find_commit(ts_target).unwrap();
+        let commit_to_rebase = repo.find_annotated_commit(ts_tip.id()).unwrap();
+
+        let mut opts: RebaseOptions<'_> = Default::default();
+        let mut rebase = repo
+            .rebase(Some(&commit_to_rebase), Some(&upstream), None, Some(&mut opts))
+            .unwrap();
+
+        let mut i = 0;
+        while (rebase.len() < 0) & (i < rebase.len()) {
+            rebase.commit(None, &signature, None).unwrap();
+            rebase.next().unwrap().unwrap();
+            i = i + 1;
+        }
+        rebase.finish(None).unwrap();
+    }
 
     let elapsed_millis = start_time.elapsed().as_millis();
     REPO_COMMIT_TIME.observe(elapsed_millis as f64 / 1000.0);
