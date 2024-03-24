@@ -17,7 +17,7 @@ mime = "0.3.16"
 moka = { version = "0.12.5", features = ["sync"] }
 oxigraph = "0.3.6"
 prometheus = "0.13.2"
-reqwest = { version = "0.11.24", features = ["json"] }
+reqwest = { version = "0.12.1", features = ["json"] }
 serde = { version = "1.0.168", features = ["derive"] }
 serde_json = "1.0.107"
 thiserror = "1.0.48"
